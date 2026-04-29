@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ParkWise</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#07090f; --bg2:#0d1120;
+  --s1:rgba(255,255,255,0.045); --s2:rgba(255,255,255,0.08);
+  --b1:rgba(255,255,255,0.08);  --b2:rgba(255,255,255,0.15);
+  --ac:#4f6ef7; --acl:#7a94ff;
+  --tl:#20e3b2; --am:#f59e0b;
+  --su:#22c55e; --da:#f43f5e;
+  --ev:#818cf8; --ax:#fbbf24;
+  --tx:#edf0fb; --t2:rgba(237,240,251,.55); --t3:rgba(237,240,251,.3);
+  --r1:13px; --r2:20px; --r3:32px;
+}
+html,body{height:100%;background:#040508;font-family:'Inter',sans-serif;color:var(--tx);overflow:hidden}
+#root{
+  height:100%;display:flex;justify-content:center;align-items:center;
+  background:
+    radial-gradient(ellipse at 25% 15%,rgba(79,110,247,.12) 0%,transparent 55%),
+    radial-gradient(ellipse at 75% 85%,rgba(32,227,178,.08) 0%,transparent 55%),
+    #040508;
+}
+.phone{
+  width:min(390px,100vw);height:min(844px,100vh);
+  background:var(--bg);border-radius:min(44px,0px);
+  overflow:hidden;display:flex;flex-direction:column;
+  box-shadow:0 40px 100px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.07);
+}
+@media(max-width:430px){.phone{border-radius:0;width:100vw;height:100vh;border:none;box-shadow:none}}
+.scr{flex:1;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+/* status bar */
+.sb{padding:15px 22px 0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.sbt{font-size:15px;font-weight:600;letter-spacing:-.3px}
+.sbi{font-size:12px;opacity:.6}
+/* buttons */
+.btn{display:flex;align-items:center;justify-content:center;gap:7px;border:none;cursor:pointer;font-family:'Inter',sans-serif;font-weight:600;transition:all .18s;user-select:none;letter-spacing:-.1px}
+.btn:active{transform:scale(.96)}
+.bp{background:var(--ac);color:#fff;padding:17px;font-size:16px;border-radius:var(--r2);width:100%;box-shadow:0 4px 28px rgba(79,110,247,.38)}
+.bp:hover{background:var(--acl)}
+.bs{background:var(--s1);color:var(--tx);padding:15px;font-size:15px;border:1px solid var(--b2);border-radius:var(--r2);width:100%}
+.bg{background:transparent;color:var(--t3);padding:11px;font-size:14px;border:none;width:100%;border-radius:var(--r1)}
+.bk{width:38px;height:38px;border-radius:11px;background:var(--s1);border:1px solid var(--b1);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:17px;flex-shrink:0;transition:background .15s}
+.bk:active{background:var(--s2)}
+/* card */
+.card{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r2);padding:18px}
+/* pills */
+.pill{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:100px;font-size:11px;font-weight:600}
+.pg{background:rgba(34,197,94,.1);color:#4ade80;border:1px solid rgba(34,197,94,.22)}
+.pr{background:rgba(244,63,94,.1);color:#fb7185;border:1px solid rgba(244,63,94,.22)}
+.pb{background:rgba(79,110,247,.12);color:var(--acl);border:1px solid rgba(79,110,247,.25)}
+.pt{background:rgba(32,227,178,.1);color:var(--tl);border:1px solid rgba(32,227,178,.22)}
+.dt{width:6px;height:6px;border-radius:50%;display:inline-block}
+/* vehicle buttons */
+.vb{flex:1;padding:14px 6px;border-radius:var(--r1);border:1px solid var(--b1);background:var(--s1);color:var(--t2);font-size:12px;font-weight:600;cursor:pointer;text-align:center;transition:all .18s;font-family:'Inter',sans-serif}
+.vb .vi{font-size:22px;display:block;margin-bottom:5px}
+.vb.sl{border-color:var(--ac);background:rgba(79,110,247,.1);color:var(--acl)}
+/* labels */
+.lbl{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--t3);margin-bottom:10px}
+/* spot id display */
+.sid{font-size:72px;font-weight:700;font-family:'JetBrains Mono',monospace;background:linear-gradient(135deg,var(--tl),var(--acl));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;letter-spacing:-3px}
+/* timer */
+.tmr{font-size:44px;font-weight:400;font-family:'JetBrains Mono',monospace;letter-spacing:2px;color:var(--am)}
+/* issue options */
+.io{display:flex;align-items:center;gap:12px;padding:13px 15px;border-radius:var(--r1);border:1px solid var(--b1);background:var(--s1);cursor:pointer;margin-bottom:8px;transition:all .18s;font-family:'Inter',sans-serif;width:100%;text-align:left}
+.io:active{transform:scale(.98)}
+.io.sl{border-color:var(--ac);background:rgba(79,110,247,.08)}
+.ii{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+/* nav steps */
+.ns{display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--b1)}
+.ns:last-child{border-bottom:none}
+.nn{width:24px;height:24px;border-radius:7px;background:rgba(79,110,247,.18);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--acl);flex-shrink:0;margin-top:1px}
+/* map wrapper */
+.mw{width:100%;border-radius:var(--r1);overflow:hidden;border:1px solid var(--b1)}
+.mw svg{display:block;width:100%;height:auto}
+/* toast */
+.toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%) translateY(12px);max-width:340px;width:90%;background:rgba(32,227,178,.1);border:1px solid rgba(32,227,178,.28);border-radius:var(--r1);padding:12px 18px;font-size:13px;font-weight:500;color:var(--tl);text-align:center;opacity:0;transition:all .3s;pointer-events:none;z-index:1000}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+/* animations */
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.42}}
+.fu{animation:fadeUp .4s ease forwards}
+.f1{animation-delay:.05s;opacity:0}.f2{animation-delay:.12s;opacity:0}
+.f3{animation-delay:.2s;opacity:0}.f4{animation-delay:.28s;opacity:0}.f5{animation-delay:.36s;opacity:0}
+.pl{animation:pulse 2s infinite}
+</style>
+</head>
+<body>
+<div id="root"><div class="phone"><div class="scr" id="scr"></div></div></div>
+<div class="toast" id="toast"></div>
+<script>
+// ── SVG LAYOUT CONSTANTS ───────────────────────────────
+// ViewBox: 0 0 520 300
+// Matches the uploaded parking lot diagram:
+// Row A (top wall, 12 spots, A01=accessible)
+// Top one-way lane → (entry from left)
+// Row B (inner top, 10 spots, faces top lane)
+// ── center divider ──
+// Row C (inner bottom, 10 spots, faces bottom lane)
+// Bottom one-way lane ← (exit on right)
+// Row D (bottom wall, 12 spots)
+// Green islands on left/right of inner section
+// Entrance left, Exit right
+
+const SV={w:520,h:300};
+const ROWS={
+  A:{y:10, h:44, n:12, x0:11, dx:41, sw:37},
+  B:{y:108,h:40, n:10, x0:58, dx:41, sw:37},
+  C:{y:156,h:40, n:10, x0:58, dx:41, sw:37},
+  D:{y:248,h:44, n:12, x0:11, dx:41, sw:37},
+};
+const TL={y:56,h:52,cy:82};   // top lane,    entry left
+const BL={y:198,h:50,cy:223}; // bottom lane, exit right
+
+function spotCX(sp){
+  return ROWS[sp.row].x0+sp.col*ROWS[sp.row].dx+ROWS[sp.row].sw/2;
+}
+
+function navPath(sp){
+  const c=spotCX(sp),r=ROWS[sp.row];
+  const rightCurve=`L 490,${TL.cy} C 512,${TL.cy} 512,${BL.cy} 490,${BL.cy}`;
+  if(sp.row==='A') return`M 11,${TL.cy} L ${c},${TL.cy} L ${c},${r.y+r.h-4}`;
+  if(sp.row==='B') return`M 11,${TL.cy} L ${c},${TL.cy} L ${c},${r.y+4}`;
+  if(sp.row==='C') return`M 11,${TL.cy} ${rightCurve} L ${c},${BL.cy} L ${c},${r.y+r.h-4}`;
+  /* D */          return`M 11,${TL.cy} ${rightCurve} L ${c},${BL.cy} L ${c},${r.y+4}`;
+}
+
+function genSteps(sp){
+  const s=[];
+  s.push('Enter from the main gate on the left');
+  if(sp.row==='A'||sp.row==='B'){
+    s.push(`Drive right along the top lane — column ${sp.col+1}`);
+    s.push(sp.row==='A'
+      ?`Turn into Row A — spot ${sp.id} is on the top wall`
+      :`Pull into the inner section — spot ${sp.id} is on your right`);
+  }else{
+    s.push('Follow the top lane all the way to the right end');
+    s.push('Loop around — take the bottom lane heading left');
+    s.push(sp.row==='C'
+      ?`Spot ${sp.id} is in the inner section on your right`
+      :`Spot ${sp.id} is on the bottom wall — column ${sp.col+1}`);
+  }
+  s.push(`Look for the green beacon — spot ${sp.id}`);
+  return s;
+}
+
+// ── SPOT DATA ────────────────────────────────────────
+function mkSpots(){
+  const all=[];
+  const push=(row,arr)=>arr.forEach((d,i)=>
+    all.push({id:`${row}${String(i+1).padStart(2,'0')}`,row,col:i,type:d.t,status:d.s}));
+  push('A',[
+    {t:'accessible',s:'free'}, {t:'regular',s:'occupied'},{t:'regular',s:'free'},
+    {t:'regular',s:'free'},    {t:'regular',s:'occupied'},{t:'regular',s:'free'},
+    {t:'regular',s:'free'},    {t:'regular',s:'occupied'},{t:'regular',s:'free'},
+    {t:'regular',s:'free'},    {t:'regular',s:'occupied'},{t:'regular',s:'free'},
+  ]);
+  push('B',[
+    {t:'regular',s:'free'},{t:'regular',s:'occupied'},{t:'regular',s:'free'},
+    {t:'regular',s:'free'},{t:'regular',s:'occupied'},{t:'regular',s:'free'},
+    {t:'regular',s:'free'},{t:'regular',s:'occupied'},{t:'ev',s:'free'},{t:'ev',s:'free'},
+  ]);
+  push('C',[
+    {t:'regular',s:'occupied'},{t:'regular',s:'free'},{t:'regular',s:'free'},
+    {t:'regular',s:'occupied'},{t:'regular',s:'free'},{t:'regular',s:'free'},
+    {t:'regular',s:'occupied'},{t:'regular',s:'free'},{t:'ev',s:'free'},{t:'ev',s:'occupied'},
+  ]);
+  push('D',[
+    {t:'regular',s:'free'},{t:'regular',s:'free'},{t:'regular',s:'occupied'},
+    {t:'regular',s:'free'},{t:'regular',s:'free'},{t:'regular',s:'occupied'},
+    {t:'regular',s:'free'},{t:'regular',s:'free'},{t:'regular',s:'occupied'},
+    {t:'regular',s:'free'},{t:'regular',s:'free'},{t:'regular',s:'occupied'},
+  ]);
+  return all;
+}
+
+// ── STATE ─────────────────────────────────────────────
+const st={
+  scr:'welcome',prev:null,
+  vt:'regular',sp:null,
+  spots:mkSpots(),
+  tStart:null,tInt:null,tVal:'00:00:00',
+  si:null,reassigned:false,
+};
+
+const ISSUES=[
+  {id:'occ',icon:'🚗',label:'Spot already occupied',   c:'#fb7185'},
+  {id:'blk',icon:'⛔',label:'Access blocked',           c:'#fbbf24'},
+  {id:'dmg',icon:'⚠️',label:'Damaged surface',          c:'#f59e0b'},
+  {id:'spl',icon:'💧',label:'Water / spill hazard',     c:'#818cf8'},
+];
+
+// ── HELPERS ───────────────────────────────────────────
+function gtime(){const n=new Date();return`${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`}
+function freeOf(t){return st.spots.filter(s=>s.status==='free'&&s.type===t)}
+function freeAll(){return st.spots.filter(s=>s.status==='free').length}
+function assignSpot(t){const f=freeOf(t);if(!f.length)return null;const c=f[Math.floor(Math.random()*f.length)];c.status='occupied';return c}
+function showToast(m){const e=document.getElementById('toast');e.textContent=m;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),2800)}
+function go(s){st.prev=st.scr;st.scr=s;render()}
+function goBack(){if(st.prev){st.scr=st.prev;st.prev=null;render()}}
+function startTimer(){
+  if(st.tInt)return;
+  st.tStart=Date.now();
+  st.tInt=setInterval(()=>{
+    const e=Math.floor((Date.now()-st.tStart)/1000);
+    st.tVal=`${String(Math.floor(e/3600)).padStart(2,'0')}:${String(Math.floor(e%3600/60)).padStart(2,'0')}:${String(e%60).padStart(2,'0')}`;
+    const el=document.getElementById('tmr');if(el)el.textContent=st.tVal;
+  },1000);
+}
+
+// ── SVG PARKING MAP ───────────────────────────────────
+function mkMap(aid, showPath, animated){
+  const asp=st.spots.find(s=>s.id===aid);
+  let v=`<svg viewBox="0 0 ${SV.w} ${SV.h}" xmlns="http://www.w3.org/2000/svg" style="background:#060d1a;display:block;width:100%;height:auto">`;
+
+  // Outer lot boundary
+  v+=`<rect x="2" y="2" width="516" height="296" rx="28" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>`;
+
+  // Lane backgrounds
+  v+=`<rect x="2" y="${TL.y}" width="516" height="${TL.h}" fill="rgba(255,255,255,0.022)"/>`;
+  v+=`<rect x="2" y="${BL.y}" width="516" height="${BL.h}" fill="rgba(255,255,255,0.022)"/>`;
+
+  // Lane direction arrows
+  v+=`<text x="170" y="${TL.cy+4}" font-size="11" fill="rgba(255,255,255,0.14)" font-family="monospace">→  →  →  →  →</text>`;
+  v+=`<text x="42"  y="${BL.cy+4}" font-size="11" fill="rgba(255,255,255,0.14)" font-family="monospace">←  ←  ←  ←  ←</text>`;
+
+  // Green islands (left & right of inner section)
+  v+=`<rect x="11" y="107" width="44" height="91" rx="8" fill="rgba(34,197,94,0.08)" stroke="rgba(34,197,94,0.22)" stroke-width="0.75"/>`;
+  v+=`<text x="33" y="156" text-anchor="middle" font-size="15" fill="rgba(34,197,94,0.45)">🌿</text>`;
+  v+=`<rect x="465" y="107" width="44" height="91" rx="8" fill="rgba(34,197,94,0.08)" stroke="rgba(34,197,94,0.22)" stroke-width="0.75"/>`;
+  v+=`<text x="487" y="156" text-anchor="middle" font-size="15" fill="rgba(34,197,94,0.45)">🌿</text>`;
+
+  // Center divider between B and C
+  v+=`<rect x="58" y="150" width="407" height="4" rx="2" fill="rgba(255,255,255,0.05)"/>`;
+
+  // No-parking hatching at bottom corners (matches image yellow zones)
+  v+=`<rect x="3"   y="252" width="7"  height="42" rx="2" fill="rgba(250,204,21,0.1)"  stroke="rgba(250,204,21,0.22)" stroke-width="0.5"/>`;
+  v+=`<rect x="510" y="252" width="7"  height="42" rx="2" fill="rgba(250,204,21,0.1)"  stroke="rgba(250,204,21,0.22)" stroke-width="0.5"/>`;
+
+  // Entrance / Exit indicators
+  v+=`<rect x="0" y="${TL.y+9}" width="5" height="34" rx="2" fill="rgba(79,110,247,0.75)"/>`;
+  v+=`<text x="12" y="${TL.cy+4}" font-size="8" fill="rgba(79,110,247,0.9)" font-weight="bold" font-family="Inter,sans-serif">IN</text>`;
+  v+=`<rect x="515" y="${BL.y+9}" width="5" height="32" rx="2" fill="rgba(244,63,94,0.75)"/>`;
+  v+=`<text x="494" y="${BL.cy+4}" font-size="8" fill="rgba(244,63,94,0.9)" font-weight="bold" font-family="Inter,sans-serif">OUT</text>`;
+
+  // ── SPOTS ──
+  st.spots.forEach(sp=>{
+    const r=ROWS[sp.row];
+    const x=r.x0+sp.col*r.dx, y=r.y, w=r.sw, h=r.h;
+    const isA=(sp.id===aid);
+    let fill,stroke;
+    if(isA)                          {fill='rgba(32,227,178,0.38)'; stroke='#20e3b2';}
+    else if(sp.status==='occupied')  {fill='rgba(244,63,94,0.1)';   stroke='rgba(244,63,94,0.28)';}
+    else if(sp.type==='ev')          {fill='rgba(129,140,248,0.13)'; stroke='rgba(129,140,248,0.38)';}
+    else if(sp.type==='accessible')  {fill='rgba(251,191,36,0.13)';  stroke='rgba(251,191,36,0.38)';}
+    else                             {fill='rgba(34,197,94,0.07)';   stroke='rgba(34,197,94,0.22)';}
+
+    v+=`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2.5" fill="${fill}" stroke="${stroke}" stroke-width="0.75"/>`;
+
+    if(isA){
+      // Pulsing beacon
+      const mx=x+w/2, my=y+h/2;
+      v+=`<circle cx="${mx}" cy="${my}" r="5" fill="#20e3b2"/>`;
+      v+=`<circle cx="${mx}" cy="${my}" r="5" fill="none" stroke="#20e3b2" stroke-width="1.5"><animate attributeName="r" values="5;16;5" dur="2s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.9;0;0.9" dur="2s" repeatCount="indefinite"/></circle>`;
+    } else if(sp.type==='accessible'){
+      v+=`<text x="${x+w/2}" y="${y+h/2+4}" text-anchor="middle" font-size="11" fill="rgba(251,191,36,0.7)">♿</text>`;
+    } else if(sp.type==='ev'&&sp.status==='free'){
+      v+=`<text x="${x+w/2}" y="${y+h/2+4}" text-anchor="middle" font-size="10" fill="rgba(129,140,248,0.7)">⚡</text>`;
+    }
+  });
+
+  // ── NAVIGATION PATH ──
+  if(showPath&&asp){
+    const pd=navPath(asp);
+    // Glow
+    v+=`<path d="${pd}" stroke="rgba(79,110,247,0.22)" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+    // Animated dashed path
+    if(animated){
+      v+=`<path d="${pd}" stroke="#5b7df9" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8 5" stroke-dashoffset="13"><animate attributeName="stroke-dashoffset" from="13" to="0" dur=".7s" repeatCount="indefinite"/></path>`;
+    }else{
+      v+=`<path d="${pd}" stroke="#5b7df9" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 4"/>`;
+    }
+    // Entry pulse dot
+    v+=`<circle cx="11" cy="${TL.cy}" r="4" fill="#5b7df9" opacity="0.9"/>`;
+    v+=`<circle cx="11" cy="${TL.cy}" r="4" fill="none" stroke="#5b7df9" stroke-width="1.5"><animate attributeName="r" values="4;11;4" dur="1.5s" repeatCount="indefinite" begin=".3s"/><animate attributeName="opacity" values="0.8;0;0.8" dur="1.5s" repeatCount="indefinite" begin=".3s"/></circle>`;
+  }
+
+  v+=`</svg>`;
+  return v;
+}
+
+// ── SCREEN: WELCOME ───────────────────────────────────
+function sWelcome(){
+  return`
+  <div class="sb"><span class="sbt" id="st">${gtime()}</span><span class="sbi">📶 🔋</span></div>
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;text-align:center">
+    <div class="fu f1" style="margin-bottom:-80px;margin-top:140px">
+      <img src="ParkWise logo.png" style="width:340px;height:340px;object-fit:contain" alt="ParkWise Logo"/>
+    </div>
+    <div class="fu f2" style="margin-bottom:8px">
+      <div style="font-size:25px;font-weight:600;letter-spacing:-.5px;line-height:1.35">Find Parking.<br>Fast.</div>
+    </div>
+    <div class="fu f3" style="margin-bottom:50px">
+      <div style="font-size:14px;color:var(--t2);line-height:1.7">Real-time spot assignment<br>&amp; guided navigation</div>
+    </div>
+    <div class="fu f4" style="width:100%;margin-bottom:14px">
+      <button class="btn bp" onclick="go('avail')">Get Started</button>
+    </div>
+    <div class="fu f5">
+      <div style="font-size:12px;color:var(--t3)"><span style="color:#4ade80;font-size:8px">●</span> ${freeAll()} spots available now</div>
+    </div>
+  </div>
+  <div style="padding-bottom:48px;display:flex;justify-content:center;gap:5px">
+    <div style="width:18px;height:3px;border-radius:2px;background:var(--ac)"></div>
+    <div style="width:5px;height:3px;border-radius:2px;background:var(--s2)"></div>
+    <div style="width:5px;height:3px;border-radius:2px;background:var(--s2)"></div>
+  </div>`;
+}
+
+// ── SCREEN: AVAILABILITY ──────────────────────────────
+function sAvail(){
+  const f=freeAll(),tot=44,pct=Math.round(f/tot*100);
+  const r=60,ci=2*Math.PI*r,da=ci*pct/100;
+  return`
+  <div class="sb"><span class="sbt" id="st">${gtime()}</span><span class="sbi">📶 🔋</span></div>
+  <div style="padding:14px 22px 0;display:flex;align-items:center;gap:10px">
+    <div class="bk" onclick="go('welcome')">←</div>
+    <div style="font-size:17px;font-weight:700">Find a Spot</div>
+  </div>
+  <div style="padding:16px 22px 0">
+    <div class="card fu f1" style="text-align:center;padding:22px 14px">
+      <svg width="146" height="146" viewBox="0 0 146 146" style="display:block;margin:0 auto 12px">
+        <circle cx="73" cy="73" r="${r}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10"/>
+        <circle cx="73" cy="73" r="${r}" fill="none" stroke="url(#cg)" stroke-width="10" stroke-linecap="round" stroke-dasharray="${da} ${ci}" transform="rotate(-90 73 73)"/>
+        <defs><linearGradient id="cg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#4f6ef7"/><stop offset="100%" stop-color="#20e3b2"/></linearGradient></defs>
+        <text x="73" y="63" text-anchor="middle" fill="#edf0fb" font-size="30" font-weight="700" font-family="JetBrains Mono,monospace">${f}</text>
+        <text x="73" y="81" text-anchor="middle" fill="rgba(237,240,251,.4)" font-size="11" font-family="Inter,sans-serif">of ${tot} free</text>
+        <text x="73" y="97" text-anchor="middle" fill="#20e3b2" font-size="11" font-weight="600" font-family="Inter,sans-serif">${pct}% available</text>
+      </svg>
+      <div style="display:flex;justify-content:center;gap:10px">
+        <span class="pill pg"><span class="dt" style="background:#4ade80"></span>${f} Free</span>
+        <span class="pill pr"><span class="dt" style="background:#fb7185"></span>${tot-f} Taken</span>
+      </div>
+    </div>
+  </div>
+  <div style="padding:14px 22px 0">
+    <div class="lbl fu f2">Vehicle Type</div>
+    <div style="display:flex;gap:8px" class="fu f2">
+      <button class="vb${st.vt==='regular'?' sl':''}"    onclick="selV('regular')"   ><span class="vi">🚗</span>Regular</button>
+      <button class="vb${st.vt==='accessible'?' sl':''}" onclick="selV('accessible')"><span class="vi">♿</span>Accessible</button>
+      <button class="vb${st.vt==='ev'?' sl':''}"         onclick="selV('ev')"        ><span class="vi">⚡</span>Electric</button>
+    </div>
+  </div>
+  <div style="padding:12px 22px 0" class="fu f3">
+    <div class="lbl">By Type</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+      <div style="background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.18);border-radius:12px;padding:12px;text-align:center">
+        <div style="font-size:9px;color:var(--t2);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:1px">Regular</div>
+        <div style="font-size:20px;font-weight:700;color:#4ade80">${freeOf('regular').length}</div>
+      </div>
+      <div style="background:rgba(129,140,248,0.06);border:1px solid rgba(129,140,248,0.18);border-radius:12px;padding:12px;text-align:center">
+        <div style="font-size:9px;color:var(--t2);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:1px">Electric</div>
+        <div style="font-size:20px;font-weight:700;color:var(--ev)">${freeOf('ev').length}</div>
+      </div>
+      <div style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.18);border-radius:12px;padding:12px;text-align:center">
+        <div style="font-size:9px;color:var(--t2);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:1px">Accessible</div>
+        <div style="font-size:20px;font-weight:700;color:var(--ax)">${freeOf('accessible').length}</div>
+      </div>
+    </div>
+  </div>
+  <div style="padding:16px 22px 32px;margin-top:auto" class="fu f4">
+    <button class="btn bp" onclick="doFind()">Find My Spot →</button>
+  </div>`;
+}
+
+// ── SCREEN: ASSIGNED ──────────────────────────────────
+function sAssigned(){
+  const sp=st.sp; if(!sp)return sAvail();
+  const tc=sp.type==='ev'?'var(--ev)':sp.type==='accessible'?'var(--ax)':'#4ade80';
+  const tl=sp.type==='ev'?'⚡ Electric':sp.type==='accessible'?'♿ Accessible':'🚗 Regular';
+  return`
+  <div class="sb"><span class="sbt" id="st">${gtime()}</span><span class="sbi">📶 🔋</span></div>
+  <div style="padding:14px 22px 0;display:flex;align-items:center;gap:10px">
+    <div class="bk" onclick="go('avail')">←</div>
+    <div style="font-size:17px;font-weight:700">${st.reassigned?'New Spot Found':'Spot Assigned'}</div>
+    <div style="margin-left:auto">
+      <span class="pill ${st.reassigned?'pt pl':'pg pl'}">${st.reassigned?'↩ Relocated':'✓ Confirmed'}</span>
+    </div>
+  </div>
+  <div style="padding:14px 22px 0;text-align:center" class="fu f1">
+    <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--t3);font-weight:600;margin-bottom:2px">Your Spot</div>
+    <div class="sid">${sp.id}</div>
+    <div style="display:flex;justify-content:center;gap:7px;margin-top:10px;flex-wrap:wrap">
+      <span class="pill" style="background:rgba(255,255,255,0.04);color:var(--t2)">Row ${sp.row}</span>
+      <span class="pill" style="background:rgba(255,255,255,0.04);color:var(--t2)">Col ${sp.col+1}</span>
+      <span class="pill" style="background:rgba(255,255,255,0.04);color:${tc}">${tl}</span>
+    </div>
+  </div>
+  <div style="padding:14px 22px 0" class="fu f2">
+    <div class="lbl">Lot Map</div>
+    <div class="mw">${mkMap(sp.id,false,false)}</div>
+    <div style="display:flex;gap:14px;margin-top:9px;flex-wrap:wrap">
+      <span style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:rgba(32,227,178,0.38);border:1px solid #20e3b2;display:inline-block"></span>Your spot</span>
+      <span style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:rgba(34,197,94,0.07);border:1px solid rgba(34,197,94,0.22);display:inline-block"></span>Free</span>
+      <span style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:rgba(244,63,94,0.1);border:1px solid rgba(244,63,94,0.28);display:inline-block"></span>Occupied</span>
+    </div>
+  </div>
+  <div style="padding:14px 22px 8px" class="fu f3">
+    <button class="btn bp" onclick="go('nav')">🗺 Navigate to Spot</button>
+  </div>
+  <div style="padding:0 22px 8px" class="fu f4">
+    <button class="btn bs" onclick="startSess()">▶ Start Session</button>
+  </div>
+  <div style="padding:0 22px 28px" class="fu f5">
+    <button class="btn bg" onclick="go('issue')">⚠ Spot Issue?</button>
+  </div>`;
+}
+
+// ── SCREEN: NAVIGATION ────────────────────────────────
+// Shows map with animated path + full step list at once
+// No tap-through – driver sees everything immediately
+function sNav(){
+  const sp=st.sp; if(!sp)return sAssigned();
+  const steps=genSteps(sp);
+  return`
+  <div class="sb"><span class="sbt" id="st">${gtime()}</span><span class="sbi">📶 🔋</span></div>
+  <div style="padding:14px 22px 0;display:flex;align-items:center;gap:10px">
+    <div class="bk" onclick="go('assigned')">←</div>
+    <div>
+      <div style="font-size:17px;font-weight:700">Navigate → ${sp.id}</div>
+      <div style="font-size:11px;color:var(--t2)">Follow the route on the map</div>
+    </div>
+    <div style="margin-left:auto"><span class="pill pb pl"><span class="dt" style="background:var(--acl)"></span>Live</span></div>
+  </div>
+  <div style="padding:12px 22px 0" class="fu f1">
+    <div class="mw">${mkMap(sp.id,true,true)}</div>
+  </div>
+  <div style="padding:14px 22px 0" class="fu f2">
+    <div class="lbl">Directions</div>
+    <div class="card" style="padding:12px 16px">
+      ${steps.map((s,i)=>`
+        <div class="ns">
+          <div class="nn">${i+1}</div>
+          <div style="font-size:13px;line-height:1.55;color:var(--t2);flex:1">${s}</div>
+        </div>`).join('')}
+    </div>
+  </div>
+  <div style="padding:14px 22px 28px" class="fu f3">
+    <button class="btn bp" onclick="arrive()">✓ I've Arrived</button>
+  </div>`;
+}
+
+// ── SCREEN: PARKING (ACTIVE SESSION) ─────────────────
+function sParking(){
+  const sp=st.sp;
+  return`
+  <div class="sb"><span class="sbt" id="st">${gtime()}</span><span class="sbi">📶 🔋</span></div>
+  <div style="padding:14px 22px 0;display:flex;align-items:center;justify-content:space-between">
+    <div style="font-size:17px;font-weight:700">Active Session</div>
+    <span class="pill pg pl"><span class="dt" style="background:#4ade80"></span>Parked</span>
+  </div>
+  <div style="padding:30px 22px 0;text-align:center" class="fu f1">
+    <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--t3);font-weight:600;margin-bottom:5px">Time Parked</div>
+    <div class="tmr" id="tmr">${st.tVal}</div>
+    <div style="font-size:11px;color:var(--t3);margin-top:5px">Since ${st.tStart?new Date(st.tStart).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'--:--'}</div>
+  </div>
+  <div style="padding:22px 22px 0" class="fu f2">
+    <div class="card" style="display:flex;align-items:center;gap:14px">
+      <div style="width:50px;height:50px;border-radius:14px;background:linear-gradient(145deg,rgba(79,110,247,.65),rgba(32,227,178,.6));display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">🅿</div>
+      <div style="flex:1">
+        <div style="font-size:11px;color:var(--t2);margin-bottom:2px">Your spot</div>
+        <div style="font-size:22px;font-weight:700;font-family:'JetBrains Mono',monospace;letter-spacing:-.5px">${sp?sp.id:'—'}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:11px;color:var(--t2)">Row</div>
+        <div style="font-size:22px;font-weight:700;color:var(--tl)">${sp?sp.row:'—'}</div>
+      </div>
+    </div>
+  </div>
+  <div style="padding:10px 22px 0" class="fu f3">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="card" style="text-align:center;padding:14px">
+        <div style="font-size:9px;color:var(--t2);margin-bottom:5px;font-weight:600;text-transform:uppercase;letter-spacing:1px">Column</div>
+        <div style="font-size:24px;font-weight:700;color:var(--acl)">${sp?sp.col+1:'—'}</div>
+      </div>
+      <div class="card" style="text-align:center;padding:14px">
+        <div style="font-size:9px;color:var(--t2);margin-bottom:5px;font-weight:600;text-transform:uppercase;letter-spacing:1px">Type</div>
+        <div style="font-size:22px">${sp?sp.type==='ev'?'⚡':sp.type==='accessible'?'♿':'🚗':'—'}</div>
+      </div>
+    </div>
+  </div>
+  <div style="padding:14px 22px 8px" class="fu f4">
+    <button class="btn bp" onclick="go('nav')">🗺 Navigate Back to Car</button>
+  </div>
+  <div style="padding:0 22px 8px" class="fu f4">
+    <button class="btn bs" onclick="go('issue')">⚠ Spot Issue</button>
+  </div>
+  <div style="padding:0 22px 28px" class="fu f5">
+    <button class="btn bg" style="color:var(--da)" onclick="endSess()">End Session</button>
+  </div>`;
+}
+
+// ── SCREEN: ISSUE → REASSIGN ──────────────────────────
+function sIssue(){
+  const sp=st.sp;
+  return`
+  <div class="sb"><span class="sbt" id="st">${gtime()}</span><span class="sbi">📶 🔋</span></div>
+  <div style="padding:14px 22px 0;display:flex;align-items:center;gap:10px">
+    <div class="bk" onclick="goBack()">←</div>
+    <div>
+      <div style="font-size:17px;font-weight:700">Spot Issue</div>
+      <div style="font-size:11px;color:var(--t2)">We'll find you a new spot</div>
+    </div>
+  </div>
+  <div style="padding:18px 22px 0" class="fu f1">
+    <div class="lbl">${sp?`Problem with spot ${sp.id}?`:'What is the issue?'}</div>
+    ${ISSUES.map(iss=>`
+      <button class="io${st.si===iss.id?' sl':''}" onclick="selI('${iss.id}')">
+        <div class="ii" style="background:${iss.c}18">${iss.icon}</div>
+        <div style="flex:1">
+          <div style="font-size:14px;font-weight:600;color:var(--tx)">${iss.label}</div>
+          <div style="font-size:11px;color:var(--t3);margin-top:2px">Tap to select</div>
+        </div>
+        ${st.si===iss.id?`<span style="color:var(--acl);font-size:18px">✓</span>`:''}
+      </button>`).join('')}
+  </div>
+  ${st.si?`
+  <div style="padding:14px 22px 0" class="fu f1">
+    <div style="background:rgba(79,110,247,0.07);border:1px solid rgba(79,110,247,0.18);border-radius:var(--r1);padding:13px 15px;font-size:13px;color:var(--t2);line-height:1.55">
+      We'll mark <strong style="color:var(--tx)">${sp?sp.id:'your spot'}</strong> as unavailable and assign you the next available <strong style="color:var(--tx)">${sp?sp.type:'matching'}</strong> spot.
+    </div>
+  </div>
+  <div style="padding:14px 22px 28px;margin-top:auto">
+    <button class="btn bp" onclick="doReassign()">↩ Reassign Me</button>
+  </div>`:`
+  <div style="flex:1;display:flex;align-items:flex-end;padding:0 22px 28px">
+    <div style="font-size:12px;color:var(--t3);text-align:center;width:100%">Select an issue type above to continue</div>
+  </div>`}`;
+}
+
+// ── ACTIONS ───────────────────────────────────────────
+function selV(t){st.vt=t;render()}
+function selI(id){st.si=id;render()}
+
+function doFind(){
+  const s=assignSpot(st.vt);
+  if(!s){showToast('No '+st.vt+' spots available right now');return}
+  st.sp=s;st.reassigned=false;go('assigned');
+}
+
+function doReassign(){
+  // Mark current spot as permanently unavailable
+  if(st.sp){const c=st.spots.find(s=>s.id===st.sp.id);if(c)c.status='occupied';}
+  const t=st.sp?st.sp.type:st.vt;
+  const ns=assignSpot(t);
+  if(!ns){showToast('No other '+t+' spots available right now');go(st.prev||'avail');return}
+  st.sp=ns;st.si=null;st.reassigned=true;go('assigned');
+}
+
+function startSess(){startTimer();go('parking')}
+function arrive()  {startTimer();go('parking')}
+
+function endSess(){
+  if(st.tInt)clearInterval(st.tInt);
+  st.tInt=null;st.tVal='00:00:00';
+  st.sp=null;st.tStart=null;st.reassigned=false;
+  st.spots=mkSpots();
+  go('welcome');
+}
+
+// ── RENDER ────────────────────────────────────────────
+const SCR={welcome:sWelcome,avail:sAvail,assigned:sAssigned,nav:sNav,parking:sParking,issue:sIssue};
+
+function render(){
+  document.getElementById('scr').innerHTML=(SCR[st.scr]||sWelcome)();
+}
+
+render();
+setInterval(()=>{const e=document.getElementById('st');if(e)e.textContent=gtime()},30000);
+</script>
+</body>
+</html>
