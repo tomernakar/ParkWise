@@ -1315,16 +1315,88 @@ button{border:none;background:none;color:inherit}
 
 /* ===== GOOGLE & DIVIDER ===== */
 .googlebtn{
-  display:flex;align-items:center;justify-content:center;gap:10px;
-  width:100%;max-width:320px;min-height:52px;padding:0 20px;border-radius:18px;
-  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);
-  color:var(--text);font-size:15px;font-weight:600;cursor:pointer;
-  transition:background .18s,border-color .18s,box-shadow .18s;margin-top:14px;
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  width:100%;max-width:320px;min-height:56px;padding:0 24px;border-radius:18px;
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.18);
+  color:var(--text);font-size:16px;font-weight:600;cursor:pointer;
+  transition:background .2s,border-color .2s,box-shadow .2s,transform .15s;
+  margin-top:8px;
+  box-shadow:0 2px 12px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.08);
+  letter-spacing:-.01em;
 }
-@media(hover:hover){.googlebtn:hover{background:rgba(255,255,255,.11);border-color:rgba(255,255,255,.28);box-shadow:0 8px 28px rgba(0,0,0,.2)}}
-.googlebtn:active{transform:scale(.98)}
-.logindivider{display:flex;align-items:center;gap:12px;width:100%;max-width:320px;color:var(--faint);font-size:12px;margin-top:16px}
-.logindivider::before,.logindivider::after{content:"";flex:1;height:1px;background:rgba(255,255,255,.1)}
+@media(hover:hover){
+  .googlebtn:hover{
+    background:rgba(255,255,255,.13);
+    border-color:rgba(255,255,255,.32);
+    box-shadow:0 8px 32px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.1);
+  }
+}
+.googlebtn:active{transform:scale(.97)}
+.logindivider{
+  display:flex;align-items:center;gap:14px;
+  width:100%;max-width:320px;
+  color:rgba(238,247,251,.3);font-size:12px;font-weight:500;
+  letter-spacing:.08em;text-transform:uppercase;
+  margin-top:20px;
+}
+.logindivider::before,.logindivider::after{content:"";flex:1;height:1px;background:rgba(255,255,255,.08)}
+
+/* ===== LOGIN SCREEN PREMIUM ===== */
+.loginwrap{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-height:calc(100dvh - var(--safe-top) - var(--safe-bottom));
+  padding:24px 20px 32px;text-align:center;
+}
+.loginbrand{display:flex;align-items:center;gap:10px;margin-bottom:32px}
+.loginbrandlogo{width:36px;height:36px;border-radius:10px;object-fit:contain;background:linear-gradient(145deg,rgba(41,199,172,.2),rgba(255,255,255,.04));border:1px solid rgba(255,255,255,.12);padding:4px}
+.loginbrandname{font-size:20px;font-weight:700;letter-spacing:-.02em;color:var(--text)}
+.logintitle{
+  font-size:32px;font-weight:700;line-height:1.1;letter-spacing:-.04em;
+  background:linear-gradient(135deg,#fff 0%,#a5f3e8 48%,#93c5fd 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  margin-bottom:8px;
+}
+.loginsubtitle{margin-top:0;margin-bottom:28px;color:rgba(238,247,251,.45);font-size:15px;line-height:1.5}
+.loginactions{width:100%;max-width:320px;display:flex;flex-direction:column;align-items:center;gap:0}
+.logincard{
+  width:100%;max-width:320px;margin-top:0;padding:22px 20px;
+  border-radius:26px;background:rgba(12,20,28,.78);
+  border:1px solid rgba(255,255,255,.1);
+  backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);
+  box-shadow:0 24px 64px rgba(0,0,0,.34),inset 0 1px 0 rgba(255,255,255,.07);
+  text-align:left;
+}
+.logintabs{
+  display:flex;width:100%;max-width:320px;margin-top:16px;margin-bottom:14px;
+  padding:4px;border-radius:18px;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);gap:4px;
+}
+.loginmainbtn{
+  width:100%;max-width:320px;min-height:54px;margin-top:16px;
+  border-radius:18px;border:none;
+  background:linear-gradient(90deg,#1da892 0%,#29c7ac 25%,#6ee8cc 50%,#29c7ac 75%,#1da892 100%);
+  background-size:200% auto;
+  animation:shimmerBtn 3.5s linear infinite;
+  color:#03261f;font-size:16px;font-weight:700;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  box-shadow:0 12px 40px rgba(41,199,172,.32);
+  transition:box-shadow .2s,transform .15s;
+  letter-spacing:.01em;
+}
+@media(hover:hover){.loginmainbtn:hover{box-shadow:0 16px 48px rgba(41,199,172,.48)}}
+.loginmainbtn:active{transform:scale(.97)}
+.loginguestbtn{
+  margin-top:20px;background:none;border:none;
+  color:rgba(238,247,251,.35);font-size:13px;cursor:pointer;
+  letter-spacing:0;padding:6px 0;
+  transition:color .18s;
+}
+@media(hover:hover){.loginguestbtn:hover{color:rgba(238,247,251,.6)}}
+.loginterms{
+  margin-top:16px;color:rgba(238,247,251,.2);font-size:11px;
+  line-height:1.6;max-width:260px;text-align:center;
+}
 </style>
 </head>
 <body>
@@ -1798,58 +1870,79 @@ function loginScreen() {
   return `
     <div class="stack">
       <section class="loginwrap fade" aria-label="Sign in">
-        <div class="loginlogo"><img src="ParkWise logo.png" alt="ParkWise"></div>
-        <div class="logintitle">Welcome to<br>ParkWise</div>
-        <p class="loginsubtitle">${_loginTab === "signin" ? "Sign in to your account" : "Create a new account"}</p>
-        ${GOOGLE_CLIENT_ID
-          ? `<div id="gsi-btn-wrap" style="width:100%;max-width:320px;margin-top:14px;min-height:52px;display:flex;align-items:center;justify-content:center"></div>`
-          : ''
-        }
-        <div class="logindivider">${GOOGLE_CLIENT_ID ? 'or' : ''} sign in with email</div>
-        <div class="logintabs">
-          <button class="logintab ${_loginTab === "signin" ? "active" : ""}" onclick="switchLoginTab('signin')">Sign In</button>
-          <button class="logintab ${_loginTab === "register" ? "active" : ""}" onclick="switchLoginTab('register')">Register</button>
+
+        <div class="loginbrand">
+          <img class="loginbrandlogo" src="ParkWise logo.png" alt="ParkWise">
+          <span class="loginbrandname">ParkWise</span>
         </div>
-        <div class="logincard">
-          ${_loginTab === "register" ? `
-            <div class="logininput">
-              <label class="loginlabel" for="inp-name">Full Name</label>
+
+        <div class="logintitle">${_loginTab === "register" ? "Create account" : "Welcome back"}</div>
+        <p class="loginsubtitle">${_loginTab === "register" ? "Join ParkWise and park smarter." : "Sign in to find your spot."}</p>
+
+        <div class="loginactions">
+          ${GOOGLE_CLIENT_ID ? `
+            <button class="googlebtn" onclick="triggerGoogleSignIn()" aria-label="Continue with Google">
+              <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+              Continue with Google
+            </button>
+            <div class="logindivider">or</div>
+          ` : ''}
+
+          <div class="logintabs">
+            <button class="logintab ${_loginTab === "signin" ? "active" : ""}" onclick="switchLoginTab('signin')">Sign In</button>
+            <button class="logintab ${_loginTab === "register" ? "active" : ""}" onclick="switchLoginTab('register')">Register</button>
+          </div>
+
+          <div class="logincard">
+            ${_loginTab === "register" ? `
+              <div class="logininput">
+                <label class="loginlabel" for="inp-name">Full Name</label>
+                <div class="inputwrap">
+                  <svg class="inputicon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="7" r="4"/><path d="M4 21v-1a8 8 0 0116 0v1"/></svg>
+                  <input id="inp-name" class="textinput" type="text" placeholder="Your full name" autocomplete="name">
+                </div>
+              </div>
+              <div class="logininput" style="margin-top:12px">
+                <label class="loginlabel" for="inp-phone">Phone (optional)</label>
+                <div class="inputwrap">
+                  <svg class="inputicon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 015.13 15.9a19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 5h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 12.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+                  <input id="inp-phone" class="textinput" type="tel" placeholder="050-000-0000" autocomplete="tel">
+                </div>
+              </div>
+            ` : ""}
+            <div class="logininput" style="${_loginTab === "register" ? "margin-top:12px" : ""}">
+              <label class="loginlabel" for="inp-email">Email</label>
               <div class="inputwrap">
-                <svg class="inputicon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="7" r="4"/><path d="M4 21v-1a8 8 0 0116 0v1"/></svg>
-                <input id="inp-name" class="textinput" type="text" placeholder="Your full name" autocomplete="name">
+                <svg class="inputicon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                <input id="inp-email" class="textinput" type="email" placeholder="you@email.com" autocomplete="email">
               </div>
             </div>
             <div class="logininput" style="margin-top:12px">
-              <label class="loginlabel" for="inp-phone">Phone (optional)</label>
+              <label class="loginlabel" for="inp-password">Password</label>
               <div class="inputwrap">
-                <svg class="inputicon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 015.13 15.9a19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 5h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 12.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
-                <input id="inp-phone" class="textinput" type="tel" placeholder="050-000-0000" autocomplete="tel">
+                <svg class="inputicon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                <input id="inp-password" class="textinput" type="password" placeholder="••••••••" autocomplete="${_loginTab === "signin" ? "current-password" : "new-password"}">
               </div>
             </div>
-          ` : ""}
-          <div class="logininput" style="${_loginTab === "register" ? "margin-top:12px" : ""}">
-            <label class="loginlabel" for="inp-email">Email</label>
-            <div class="inputwrap">
-              <svg class="inputicon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-              <input id="inp-email" class="textinput" type="email" placeholder="you@email.com" autocomplete="email">
-            </div>
           </div>
-          <div class="logininput" style="margin-top:12px">
-            <label class="loginlabel" for="inp-password">Password</label>
-            <div class="inputwrap">
-              <svg class="inputicon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-              <input id="inp-password" class="textinput" type="password" placeholder="••••••••" autocomplete="${_loginTab === "signin" ? "current-password" : "new-password"}">
-            </div>
-          </div>
+
+          <button class="loginmainbtn" onclick="${_loginTab === "signin" ? "submitSignIn()" : "submitRegister()"}">
+            ${_loginTab === "signin" ? "Sign In" : "Create Account"}
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><polyline points="12 5 19 12 12 19"/></svg>
+          </button>
+
+          <button class="loginguestbtn" onclick="continueAsGuest()">
+            Continue without account →
+          </button>
+
+          <p class="loginterms">By continuing you agree to ParkWise's Terms of Service and Privacy Policy.</p>
         </div>
-        <button class="homebrandcta" style="margin-top:24px;width:100%;max-width:320px"
-          onclick="${_loginTab === "signin" ? "submitSignIn()" : "submitRegister()"}">
-          ${_loginTab === "signin" ? "Sign In" : "Create Account"}
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><polyline points="12 5 19 12 12 19"/></svg>
-        </button>
-        <button onclick="continueAsGuest()" style="margin-top:18px;background:none;border:none;color:var(--faint);font-size:13px;cursor:pointer;letter-spacing:0;padding:6px 0">
-          Continue without account →
-        </button>
+
       </section>
     </div>
   `;
@@ -2172,25 +2265,33 @@ async function openHistory() {
 }
 
 // ===== GOOGLE SIGN-IN =====
+let _googleInitialized = false;
+
 function initGoogleSignIn() {
   if (!GOOGLE_CLIENT_ID) return;
   if (!window.google?.accounts?.id) {
     if (state.screen === 'login') setTimeout(initGoogleSignIn, 400);
     return;
   }
-  const wrap = document.getElementById('gsi-btn-wrap');
-  if (!wrap) return;
+  if (_googleInitialized) return;
+  _googleInitialized = true;
   google.accounts.id.initialize({
     client_id: GOOGLE_CLIENT_ID,
     callback: handleGoogleCredential,
     auto_select: false,
   });
-  google.accounts.id.renderButton(wrap, {
-    theme: 'filled_black',
-    size: 'large',
-    text: 'continue_with',
-    width: Math.min(320, window.innerWidth - 40),
-    logo_alignment: 'left',
+}
+
+function triggerGoogleSignIn() {
+  if (!GOOGLE_CLIENT_ID) return;
+  if (!window.google?.accounts?.id) {
+    showToast('Google Sign-In is loading, please try again.');
+    return;
+  }
+  google.accounts.id.prompt((notification) => {
+    if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+      showToast('Please allow the Google popup, or use email sign-in below.');
+    }
   });
 }
 
