@@ -5,3 +5,9 @@ node_modules/
 __pycache__/
 *.pyc
 *.pyo
+
+# Vision output belongs only in ParkWise-Vision/, never at repo root
+/zones.json
+/baseline.jpg
+/status.json
+/debug_snapshot.jpg
