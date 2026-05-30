@@ -1,0 +1,147 @@
+{
+  "lot_id": "demo_lot_1",
+  "timestamp": "2026-05-16T20:40:46Z",
+  "threshold": 25,
+  "spots": [
+    {
+      "id": "L01",
+      "status": "free",
+      "score": 8.91
+    },
+    {
+      "id": "L02",
+      "status": "free",
+      "score": 8.1
+    },
+    {
+      "id": "L03",
+      "status": "free",
+      "score": 7.61
+    },
+    {
+      "id": "L04",
+      "status": "free",
+      "score": 6.13
+    },
+    {
+      "id": "L05",
+      "status": "free",
+      "score": 5.37
+    },
+    {
+      "id": "L06",
+      "status": "free",
+      "score": 4.77
+    },
+    {
+      "id": "L07",
+      "status": "free",
+      "score": 3.84
+    },
+    {
+      "id": "L08",
+      "status": "free",
+      "score": 4.09
+    },
+    {
+      "id": "L09",
+      "status": "free",
+      "score": 4.67
+    },
+    {
+      "id": "L10",
+      "status": "free",
+      "score": 4.89
+    },
+    {
+      "id": "R01",
+      "status": "free",
+      "score": 6.95
+    },
+    {
+      "id": "R02",
+      "status": "free",
+      "score": 5.99
+    },
+    {
+      "id": "R03",
+      "status": "free",
+      "score": 5.34
+    },
+    {
+      "id": "R04",
+      "status": "free",
+      "score": 5.69
+    },
+    {
+      "id": "R05",
+      "status": "free",
+      "score": 6.15
+    },
+    {
+      "id": "R06",
+      "status": "free",
+      "score": 4.44
+    },
+    {
+      "id": "R07",
+      "status": "free",
+      "score": 4.87
+    },
+    {
+      "id": "R08",
+      "status": "free",
+      "score": 4.37
+    },
+    {
+      "id": "R09",
+      "status": "free",
+      "score": 4.6
+    },
+    {
+      "id": "R10",
+      "status": "free",
+      "score": 4.95
+    },
+    {
+      "id": "M01",
+      "status": "free",
+      "score": 8.94
+    },
+    {
+      "id": "M02",
+      "status": "free",
+      "score": 7.26
+    },
+    {
+      "id": "M03",
+      "status": "free",
+      "score": 5.54
+    },
+    {
+      "id": "N01",
+      "status": "free",
+      "score": 1.81
+    },
+    {
+      "id": "N02",
+      "status": "free",
+      "score": 2.58
+    },
+    {
+      "id": "N03",
+      "status": "free",
+      "score": 2.79
+    },
+    {
+      "id": "N04",
+      "status": "free",
+      "score": 3.83
+    }
+  ],
+  "summary": {
+    "total": 27,
+    "occupied": 0,
+    "free": 27
+  }
+}
