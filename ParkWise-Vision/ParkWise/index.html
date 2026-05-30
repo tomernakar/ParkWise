@@ -1871,13 +1871,9 @@ function loginScreen() {
     <div class="stack">
       <section class="loginwrap fade" aria-label="Sign in">
 
-        <div class="loginbrand">
-          <img class="loginbrandlogo" src="ParkWise logo.png" alt="ParkWise">
-          <span class="loginbrandname">ParkWise</span>
-        </div>
-
-        <div class="logintitle">${_loginTab === "register" ? "Create account" : "Welcome back"}</div>
-        <p class="loginsubtitle">${_loginTab === "register" ? "Join ParkWise and park smarter." : "Sign in to find your spot."}</p>
+        <div class="loginlogo"><img src="ParkWise logo.png" alt="ParkWise"></div>
+        <div class="logintitle">${_loginTab === "register" ? "Create<br>Account" : "Welcome to<br>ParkWise"}</div>
+        <p class="loginsubtitle">${_loginTab === "register" ? "Join ParkWise and park smarter." : "Sign in to your account"}</p>
 
         <div class="loginactions">
           ${GOOGLE_CLIENT_ID ? `
@@ -2283,16 +2279,25 @@ function initGoogleSignIn() {
 }
 
 function triggerGoogleSignIn() {
-  if (!GOOGLE_CLIENT_ID) return;
-  if (!window.google?.accounts?.id) {
+  if (!GOOGLE_CLIENT_ID || !window.google?.accounts?.id) {
     showToast('Google Sign-In is loading, please try again.');
     return;
   }
-  google.accounts.id.prompt((notification) => {
-    if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-      showToast('Please allow the Google popup, or use email sign-in below.');
-    }
-  });
+  // Use a hidden rendered button so it always opens a reliable popup
+  let container = document.getElementById('_gsi_hidden');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = '_gsi_hidden';
+    container.style.cssText = 'position:fixed;top:-999px;left:-999px;width:200px;height:50px;overflow:hidden;';
+    document.body.appendChild(container);
+  }
+  container.innerHTML = '';
+  google.accounts.id.renderButton(container, { size: 'large', type: 'standard', text: 'continue_with' });
+  setTimeout(() => {
+    const btn = container.querySelector('div[role="button"]') || container.querySelector('button');
+    if (btn) btn.click();
+    else google.accounts.id.prompt();
+  }, 80);
 }
 
 async function handleGoogleCredential(response) {
