@@ -39,6 +39,25 @@ from datetime import datetime, timezone
 
 import cv2
 import numpy as np
+
+# --- Unicode-safe image IO (OpenCV's imread/imwrite fail on non-ASCII paths) ---
+def imread_unicode(path, flags=cv2.IMREAD_COLOR):
+    try:
+        data = np.fromfile(path, dtype=np.uint8)
+    except OSError:
+        return None
+    if data.size == 0:
+        return None
+    return cv2.imdecode(data, flags)
+
+
+def imwrite_unicode(path, img):
+    ext = os.path.splitext(path)[1] or ".jpg"
+    ok, buf = cv2.imencode(ext, img)
+    if ok:
+        buf.tofile(path)
+    return ok
+
 import requests
 
 
@@ -48,9 +67,12 @@ import requests
 BACKEND_URL = "http://vmedu471.mtacloud.co.il:3000/api/spots/update"
 
 WINDOW_NAME = "ParkWise - Occupancy Detector"
-ZONES_FILE = "zones.json"
-BASELINE_FILE = "baseline.jpg"
-DEBUG_SNAPSHOT_FILE = "debug_snapshot.jpg"
+# Always read/write data in the ParkWise-Vision folder (the parent of this
+# script's directory), regardless of the current working directory.
+DATA_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ZONES_FILE = os.path.join(DATA_DIR, "zones.json")
+BASELINE_FILE = os.path.join(DATA_DIR, "baseline.jpg")
+DEBUG_SNAPSHOT_FILE = os.path.join(DATA_DIR, "debug_snapshot.jpg")
 
 # BGR
 COLOR_FREE = (0, 200, 0)
@@ -95,7 +117,7 @@ def load_zones():
 def load_baseline():
     if not os.path.exists(BASELINE_FILE):
         sys.exit(f"Error: {BASELINE_FILE} not found in CWD. Run mark_zones.py first.")
-    img = cv2.imread(BASELINE_FILE)
+    img = imread_unicode(BASELINE_FILE)
     if img is None:
         sys.exit(f"Error: could not decode {BASELINE_FILE}.")
     return img
@@ -247,16 +269,16 @@ def open_video_source(args):
 def parse_args():
     p = argparse.ArgumentParser(description="ParkWise occupancy detector")
     src = p.add_mutually_exclusive_group()
-    src.add_argument("--camera", type=int, default=1,
-                     help="Webcam index (default 1 — Logitech on this machine)")
+    src.add_argument("--camera", type=int, default=0,
+                     help="Webcam index (default 0 — external camera on this machine)")
     src.add_argument("--video", type=str, help="Path to video file (replay mode)")
     src.add_argument("--image", type=str, help="Path to single image (one-shot mode)")
     p.add_argument("--threshold", type=int, default=25,
                    help="Mean diff above which a zone counts as occupied (default 25)")
     p.add_argument("--no-window", action="store_true",
                    help="Headless mode — JSON only, no debug window")
-    p.add_argument("--output", type=str, default="status.json",
-                   help="JSON output path (default status.json)")
+    p.add_argument("--output", type=str, default=os.path.join(DATA_DIR, "status.json"),
+                   help="JSON output path (default: ParkWise-Vision/status.json)")
     return p.parse_args()
 
 
@@ -287,7 +309,7 @@ def main():
 
     # ---- Single-image mode: detect once, output, exit ----
     if args.image:
-        frame = cv2.imread(args.image)
+        frame = imread_unicode(args.image)
         if frame is None:
             sys.exit(f"Error: could not read {args.image}")
         if frame.shape[:2] != (h, w):
@@ -362,7 +384,7 @@ def main():
                 if key == ord('q') or key == 27:
                     break
                 elif key == ord('s'):
-                    cv2.imwrite(DEBUG_SNAPSHOT_FILE, canvas)
+                    imwrite_unicode(DEBUG_SNAPSHOT_FILE, canvas)
                     print(f"Saved {DEBUG_SNAPSHOT_FILE}")
                 elif key in (ord('+'), ord('=')):
                     threshold += THRESHOLD_STEP
@@ -373,7 +395,7 @@ def main():
                 elif key == ord('b'):
                     baseline = frame.copy()
                     base_gray = preprocess(baseline)
-                    cv2.imwrite(BASELINE_FILE, baseline)
+                    imwrite_unicode(BASELINE_FILE, baseline)
                     print(f"Baseline rebaselined and saved -> {BASELINE_FILE}")
             # Headless: Ctrl-C to exit
     except KeyboardInterrupt:

@@ -1,142 +1,142 @@
 {
   "lot_id": "demo_lot_1",
-  "timestamp": "2026-05-16T20:40:46Z",
+  "timestamp": "2026-06-01T18:13:25Z",
   "threshold": 25,
   "spots": [
     {
-      "id": "L01",
+      "id": "S1",
       "status": "free",
-      "score": 8.91
+      "score": 4.34
     },
     {
-      "id": "L02",
+      "id": "S2",
       "status": "free",
-      "score": 8.1
+      "score": 4.36
     },
     {
-      "id": "L03",
+      "id": "S3",
       "status": "free",
-      "score": 7.61
+      "score": 3.99
     },
     {
-      "id": "L04",
+      "id": "S4",
       "status": "free",
-      "score": 6.13
+      "score": 3.43
     },
     {
-      "id": "L05",
+      "id": "S5",
       "status": "free",
-      "score": 5.37
+      "score": 3.51
     },
     {
-      "id": "L06",
+      "id": "S6",
       "status": "free",
-      "score": 4.77
+      "score": 3.89
     },
     {
-      "id": "L07",
+      "id": "S7",
       "status": "free",
-      "score": 3.84
+      "score": 3.79
     },
     {
-      "id": "L08",
+      "id": "S8",
       "status": "free",
-      "score": 4.09
+      "score": 3.69
     },
     {
-      "id": "L09",
+      "id": "S9",
       "status": "free",
-      "score": 4.67
+      "score": 3.42
     },
     {
-      "id": "L10",
+      "id": "S10",
       "status": "free",
-      "score": 4.89
+      "score": 3.48
     },
     {
-      "id": "R01",
+      "id": "S11",
       "status": "free",
-      "score": 6.95
+      "score": 4.34
     },
     {
-      "id": "R02",
+      "id": "S12",
       "status": "free",
-      "score": 5.99
+      "score": 4.39
     },
     {
-      "id": "R03",
+      "id": "S13",
       "status": "free",
-      "score": 5.34
+      "score": 4.38
     },
     {
-      "id": "R04",
+      "id": "S14",
       "status": "free",
-      "score": 5.69
+      "score": 3.65
     },
     {
-      "id": "R05",
+      "id": "S15",
       "status": "free",
-      "score": 6.15
+      "score": 3.86
     },
     {
-      "id": "R06",
+      "id": "S16",
       "status": "free",
-      "score": 4.44
+      "score": 3.96
     },
     {
-      "id": "R07",
+      "id": "S17",
       "status": "free",
-      "score": 4.87
+      "score": 4.13
     },
     {
-      "id": "R08",
+      "id": "S18",
       "status": "free",
-      "score": 4.37
+      "score": 5.32
     },
     {
-      "id": "R09",
+      "id": "S19",
       "status": "free",
-      "score": 4.6
+      "score": 5.35
     },
     {
-      "id": "R10",
+      "id": "S20",
       "status": "free",
-      "score": 4.95
+      "score": 4.98
     },
     {
-      "id": "M01",
+      "id": "S21",
       "status": "free",
-      "score": 8.94
+      "score": 5.02
     },
     {
-      "id": "M02",
+      "id": "S22",
       "status": "free",
-      "score": 7.26
+      "score": 4.75
     },
     {
-      "id": "M03",
+      "id": "S23",
       "status": "free",
-      "score": 5.54
+      "score": 4.28
     },
     {
-      "id": "N01",
+      "id": "S24",
       "status": "free",
-      "score": 1.81
+      "score": 4.2
     },
     {
-      "id": "N02",
+      "id": "S25",
       "status": "free",
-      "score": 2.58
+      "score": 4.62
     },
     {
-      "id": "N03",
+      "id": "S26",
       "status": "free",
-      "score": 2.79
+      "score": 5.01
     },
     {
-      "id": "N04",
+      "id": "S27",
       "status": "free",
-      "score": 3.83
+      "score": 4.32
     }
   ],
   "summary": {

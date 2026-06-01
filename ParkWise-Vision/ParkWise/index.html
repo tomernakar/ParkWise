@@ -1429,6 +1429,10 @@ const LOTS = [
   { id: "campus", name: "Exelerator Demo Lot", address: "Exelerator Campus, Level 1", icon: "🅿️", distance: "0.1 km", total: 27 },
 ];
 
+// lot_id the vision detector posts to /api/spots/update (see ParkWise-Vision/zones.json).
+// The initial /api/spots fetch must request this lot so live statuses show on load.
+const CV_LOT_ID = "demo_lot_1";
+
 function getToken() { return localStorage.getItem(TOKEN_KEY); }
 function setToken(t) { localStorage.setItem(TOKEN_KEY, t); }
 function clearToken() { localStorage.removeItem(TOKEN_KEY); }
@@ -1494,7 +1498,13 @@ const VEHICLES = {
 
 function createSpots() {
   const spots = [];
-  const add = (id, row, col, type, defStatus, x, y, w, h) => {
+  // Spots are labeled sequentially S1..S27 to match the CV zone ids posted by
+  // the vision detector (ParkWise-Vision/zones.json). The physical layout below
+  // (left/right walls, center islands) is kept for the map and navigation; only
+  // the ids are generic. Creation order defines the S-number.
+  let n = 0;
+  const add = (row, col, type, defStatus, x, y, w, h) => {
+    const id = `S${++n}`;
     let status;
     if (_reservedSpots.has(id)) {
       // Reserved by app: stay reserved unless CV confirms car arrived
@@ -1505,29 +1515,29 @@ function createSpots() {
     spots.push({ id, row, col, type, status, x, y, w, h });
   };
 
-  // Left wall - 10 spots (top to bottom, horizontal rects)
+  // Left wall - 10 spots (top to bottom, horizontal rects)  -> S1..S10
   const SY = 32, DY = 37;
   const lTypes = ["regular","regular","regular","regular","regular","regular","regular","regular","accessible","accessible"];
   for (let i = 0; i < 10; i++) {
-    add(`L${String(i+1).padStart(2,"0")}`, "L", i, lTypes[i], "free", 7, SY + i*DY, 38, 17);
+    add("L", i, lTypes[i], "free", 7, SY + i*DY, 38, 17);
   }
 
-  // Right wall - 10 spots (top to bottom, horizontal rects)
+  // Right wall - 10 spots (top to bottom, horizontal rects)  -> S11..S20
   const rTypes = ["accessible","accessible","regular","regular","regular","ev","regular","regular","accessible","accessible"];
   for (let i = 0; i < 10; i++) {
-    add(`R${String(i+1).padStart(2,"0")}`, "R", i, rTypes[i], "free", 255, SY + i*DY, 38, 17);
+    add("R", i, rTypes[i], "free", 255, SY + i*DY, 38, 17);
   }
 
-  // Center upper island - single column of 3 spots
+  // Center upper island - single column of 3 spots  -> S21..S23
   const mTypes = ["accessible","regular","regular"];
   for (let i = 0; i < 3; i++) {
-    add(`M${String(i+1).padStart(2,"0")}`, "M", i, mTypes[i], "free", 133, 80 + i*42, 34, 19);
+    add("M", i, mTypes[i], "free", 133, 80 + i*42, 34, 19);
   }
 
-  // Center lower island - single column of 4 spots
+  // Center lower island - single column of 4 spots  -> S24..S27
   const nTypes = ["regular","regular","regular","regular"];
   for (let i = 0; i < 4; i++) {
-    add(`N${String(i+1).padStart(2,"0")}`, "N", i, nTypes[i], "free", 133, 240 + i*40, 34, 19);
+    add("N", i, nTypes[i], "free", 133, 240 + i*40, 34, 19);
   }
 
   return spots;
@@ -2727,7 +2737,7 @@ function patchSpotColors() {
 
 async function loadSpotStatuses() {
   try {
-    const res = await fetch("/api/spots");
+    const res = await fetch(`/api/spots?lot_id=${encodeURIComponent(CV_LOT_ID)}`);
     if (!res.ok) return;
     const data = await res.json();
     if (!(data.spots || []).length) return;

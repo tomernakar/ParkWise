@@ -1,58 +1,67 @@
 """
-ParkWise — rename_zones.py
+ParkWise - rename_zones.py
 ==========================
 
-Renames the auto-generated S1…S27 zone IDs in zones.json (and status.json if
-it exists) to the IDs the ParkWise app expects, based on the order the zones
-were marked in mark_zones.py:
+Renames the auto-detected S1..S27 zone IDs (from auto_mark_zones.py) to the
+IDs the ParkWise app's map expects.
 
-    S1 –S10  →  L01–L10   (left column,      marked top→bottom)
-    S11–S20  →  R01–R10   (right column,     marked top→bottom)
-    S21–S23  →  M01–M03   (centre top row,   marked left→right)
-    S24–S27  →  N01–N04   (centre bottom row, marked left→right)
+auto_mark_zones.py numbers zones in this order (top->bottom, left->right):
+    S1 -S10  ->  top row        (10 spaces)
+    S11-S13  ->  left island    (3 spaces)
+    S14-S17  ->  right island   (4 spaces)
+    S18-S27  ->  bottom row     (10 spaces)
 
-USAGE
+The app's map uses these IDs:
+    L01-L10  =  left wall   (10)
+    R01-R10  =  right wall  (10)
+    M01-M03  =  centre upper island (3)
+    N01-N04  =  centre lower island (4)
+
+Mapping applied here:
+    S1 -S10  ->  L01-L10   (top row)
+    S11-S13  ->  M01-M03   (left island)
+    S14-S17  ->  N01-N04   (right island)
+    S18-S27  ->  R01-R10   (bottom row)
+
+USAGE  (run from anywhere - paths are anchored to the ParkWise-Vision folder)
 -----
-    py rename_zones.py                     # dry-run preview
-    py rename_zones.py --apply             # write the renamed files
-
-Run from the ParkWise-Vision directory (where zones.json lives).
+    python rename_zones.py            # dry-run preview
+    python rename_zones.py --apply    # write the renamed files
 """
 
 import argparse
 import json
+import os
 import sys
-from pathlib import Path
 
-ZONES_FILE  = Path("zones.json")
-STATUS_FILE = Path("status.json")
+# Anchor file paths to the ParkWise-Vision folder (parent of this script's dir),
+# so it works no matter which directory you run from.
+DATA_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ZONES_FILE  = os.path.join(DATA_DIR, "zones.json")
+STATUS_FILE = os.path.join(DATA_DIR, "status.json")
 
-# Build the canonical mapping  S<n> → target_id
-# Order matches the marking order agreed with the user.
-def build_mapping() -> dict[str, str]:
-    mapping: dict[str, str] = {}
+
+def build_mapping():
+    """S<n> -> app ID, matching auto_mark_zones.py's detection order."""
+    mapping = {}
     n = 1
-    for col in range(1, 11):          # L01–L10
-        mapping[f"S{n}"] = f"L{col:02d}"
-        n += 1
-    for col in range(1, 11):          # R01–R10
-        mapping[f"S{n}"] = f"R{col:02d}"
-        n += 1
-    for col in range(1, 4):           # M01–M03
-        mapping[f"S{n}"] = f"M{col:02d}"
-        n += 1
-    for col in range(1, 5):           # N01–N04
-        mapping[f"S{n}"] = f"N{col:02d}"
-        n += 1
+    for c in range(1, 11):   # S1 -S10 -> L01-L10  (top row)
+        mapping[f"S{n}"] = f"L{c:02d}"; n += 1
+    for c in range(1, 4):    # S11-S13 -> M01-M03  (left island)
+        mapping[f"S{n}"] = f"M{c:02d}"; n += 1
+    for c in range(1, 5):    # S14-S17 -> N01-N04  (right island)
+        mapping[f"S{n}"] = f"N{c:02d}"; n += 1
+    for c in range(1, 11):   # S18-S27 -> R01-R10  (bottom row)
+        mapping[f"S{n}"] = f"R{c:02d}"; n += 1
     return mapping
 
 
-def rename_zones_file(mapping: dict[str, str], apply: bool) -> int:
-    if not ZONES_FILE.exists():
-        print(f"ERROR: {ZONES_FILE} not found — run mark_zones.py first.")
+def rename_zones_file(mapping, apply):
+    if not os.path.exists(ZONES_FILE):
+        print(f"ERROR: {ZONES_FILE} not found - run auto_mark_zones.py first.")
         return 1
 
-    with ZONES_FILE.open(encoding="utf-8") as f:
+    with open(ZONES_FILE, encoding="utf-8") as f:
         data = json.load(f)
 
     zones = data.get("zones", [])
@@ -60,20 +69,19 @@ def rename_zones_file(mapping: dict[str, str], apply: bool) -> int:
         print(f"ERROR: {ZONES_FILE} contains no zones.")
         return 1
 
-    print(f"\nzones.json — {len(zones)} zones found")
-    print(f"{'Old ID':<8}  {'New ID':<8}  corners")
-    print("-" * 40)
+    print(f"\nzones.json - {len(zones)} zones found")
+    print(f"{'Old ID':<8}{'New ID':<8}")
+    print("-" * 24)
 
-    changed = 0
-    unknown = []
+    changed, unknown = 0, []
     for z in zones:
         old = z["id"]
         new = mapping.get(old)
         if new is None:
             unknown.append(old)
-            print(f"  {old:<8}  {'???':<8}  (no mapping — left unchanged)")
+            print(f"  {old:<8}{'???':<8}(no mapping - left unchanged)")
         else:
-            print(f"  {old:<8}  {new:<8}")
+            print(f"  {old:<8}{new:<8}")
             if apply:
                 z["id"] = new
             changed += 1
@@ -82,43 +90,38 @@ def rename_zones_file(mapping: dict[str, str], apply: bool) -> int:
         print(f"\nWARNING: {len(unknown)} zone(s) have no mapping: {unknown}")
 
     if apply:
-        with ZONES_FILE.open("w", encoding="utf-8") as f:
+        with open(ZONES_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
-        print(f"\n✓ zones.json updated ({changed} zones renamed).")
+        print(f"\nOK - zones.json updated ({changed} zones renamed).")
     else:
-        print(f"\nDry-run — pass --apply to write changes.")
-
+        print(f"\nDry-run - pass --apply to write changes.")
     return 0
 
 
-def rename_status_file(mapping: dict[str, str], apply: bool) -> None:
-    if not STATUS_FILE.exists():
-        print(f"\nstatus.json not found — skipping.")
+def rename_status_file(mapping, apply):
+    if not os.path.exists(STATUS_FILE):
+        print("\nstatus.json not found - skipping.")
         return
-
-    with STATUS_FILE.open(encoding="utf-8") as f:
+    with open(STATUS_FILE, encoding="utf-8") as f:
         data = json.load(f)
-
     spots = data.get("spots", [])
     changed = 0
     for sp in spots:
-        old = sp["id"]
-        new = mapping.get(old)
+        new = mapping.get(sp["id"])
         if new:
             if apply:
                 sp["id"] = new
             changed += 1
-
     if apply:
-        with STATUS_FILE.open("w", encoding="utf-8") as f:
+        with open(STATUS_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
-        print(f"✓ status.json updated ({changed} spots renamed).")
+        print(f"OK - status.json updated ({changed} spots renamed).")
     else:
-        print(f"status.json — {changed} spots would be renamed (dry-run).")
+        print(f"status.json - {changed} spots would be renamed (dry-run).")
 
 
-def main() -> int:
-    p = argparse.ArgumentParser(description="Rename S1-S27 zone IDs to L/R/M/N scheme")
+def main():
+    p = argparse.ArgumentParser(description="Rename S1-S27 zone IDs to the app's L/R/M/N scheme")
     p.add_argument("--apply", action="store_true",
                    help="Write changes to disk (default: dry-run only)")
     args = p.parse_args()
@@ -126,9 +129,9 @@ def main() -> int:
     mapping = build_mapping()
 
     print("Mapping table:")
-    for src, dst in mapping.items():
-        print(f"  {src} → {dst}", end="   ")
-        if int(src[1:]) % 5 == 0:
+    for i, (src, dst) in enumerate(mapping.items(), 1):
+        print(f"  {src} -> {dst}", end="   ")
+        if i % 5 == 0:
             print()
     print()
 
