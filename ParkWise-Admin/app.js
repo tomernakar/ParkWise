@@ -17,6 +17,7 @@ const state = {
   loginError: "",
   loginBusy: false,
   booting: true,
+  demo: false,            // offline preview mode (no backend)
   // Spots & Lots management
   lots: [],
   adminSpots: [],         // /api/admin/spots for the managed lot
@@ -34,6 +35,7 @@ const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
 const clearToken = () => localStorage.removeItem(TOKEN_KEY);
 
 async function api(path, opts = {}) {
+  if (state.demo) return demoApi(path, opts);   // offline preview — no network
   const token = getToken();
   const headers = {
     "Content-Type": "application/json",
@@ -47,8 +49,146 @@ async function api(path, opts = {}) {
   return data;
 }
 
+// ---------------------------------------------------------------------------
+// Demo mode — a full in-browser mock of the admin API so the dashboard can be
+// previewed by opening index.html directly (file://), with no backend or DB.
+// ---------------------------------------------------------------------------
+const DEMO_TOKEN = "demo-mode";
+const DEMO = {
+  email: "admin@parkwise.app",
+  password: "admin123",
+  user: { id: 0, name: "Demo Admin", email: "admin@parkwise.app", role: "admin" },
+  lots: [],
+  spots: {},   // lot_id -> [ { id, status, out_of_service, score } ]
+};
+
+function demoInit() {
+  DEMO.lots = [
+    { lot_id: "demo_lot_1", name: "Exelerator Demo Lot", address: "Exelerator Campus, Level 1", total_spots: 27 },
+  ];
+  const occupied = new Set(["S2", "S3", "S5", "S7", "S9", "S11", "S15", "S20", "S24"]);
+  const oos = new Set(["S13"]);
+  DEMO.spots = {
+    demo_lot_1: Object.keys(LAYOUT).map((id) => ({
+      id,
+      status: occupied.has(id) ? "occupied" : "free",
+      out_of_service: oos.has(id),
+      score: occupied.has(id) ? 28 + Math.round(Math.random() * 12) : Math.round(Math.random() * 8),
+    })),
+  };
+}
+
+function enterDemo() {
+  state.demo = true;
+  demoInit();
+  setToken(DEMO_TOKEN);
+  state.user = { ...DEMO.user };
+  state.loginError = "";
+  state.loginBusy = false;
+  state.booting = false;
+  state.view = "overview";
+  state.lotId = DEFAULT_LOT_ID;
+  state.manageLotId = DEFAULT_LOT_ID;
+  render();
+  afterEnterDashboard();
+}
+
+const demoSpotsOf = (lotId) => DEMO.spots[lotId] || [];
+function demoLotsWithCounts() {
+  return DEMO.lots.map((l) => {
+    const ss = demoSpotsOf(l.lot_id);
+    return {
+      ...l,
+      spot_count: ss.length,
+      occupied: ss.filter((s) => s.status === "occupied" && !s.out_of_service).length,
+      free: ss.filter((s) => s.status === "free" && !s.out_of_service).length,
+      out_of_service: ss.filter((s) => s.out_of_service).length,
+    };
+  });
+}
+function demoOverview(lotId) {
+  const ss = demoSpotsOf(lotId);
+  const occupied = ss.filter((s) => s.status === "occupied" && !s.out_of_service).length;
+  const out = ss.filter((s) => s.out_of_service).length;
+  const free = ss.filter((s) => s.status === "free" && !s.out_of_service).length;
+  const total = ss.length;
+  const serviceable = total - out;
+  return {
+    lot_id: lotId,
+    timestamp: new Date().toISOString(),
+    users: { total: 128, admins: 2 },
+    sessions: { active: 14 },
+    reports: { open: 3 },
+    occupancy: {
+      total, occupied, free, out_of_service: out, serviceable,
+      by_status: { free, occupied, out_of_service: out },
+      percent: serviceable ? Math.round((occupied / serviceable) * 100) : 0,
+    },
+  };
+}
+
+async function demoApi(path, opts = {}) {
+  const method = (opts.method || "GET").toUpperCase();
+  const body = opts.body ? JSON.parse(opts.body) : {};
+  const u = new URL(path, "http://demo.local");
+  const p = u.pathname;
+  const qLot = u.searchParams.get("lot_id") || DEFAULT_LOT_ID;
+
+  if (p === "/api/auth/me") return { user: { ...DEMO.user } };
+  if (p === "/api/admin/overview") return demoOverview(qLot);
+  if (p === "/api/spots") {
+    return { lot_id: qLot, spots: demoSpotsOf(qLot).map((s) => ({
+      id: s.id, status: s.out_of_service ? "out_of_service" : s.status,
+      raw_status: s.status, out_of_service: s.out_of_service, score: s.score,
+    })) };
+  }
+  if (p === "/api/admin/lots" && method === "GET") return { lots: demoLotsWithCounts() };
+  if (p === "/api/admin/lots" && method === "POST") {
+    if (DEMO.lots.some((l) => l.lot_id === body.lot_id)) throw new Error("A lot with that id already exists");
+    DEMO.lots.push({ lot_id: body.lot_id, name: body.name, address: body.address || "", total_spots: body.total_spots || 0 });
+    DEMO.spots[body.lot_id] = DEMO.spots[body.lot_id] || [];
+    return { ok: true };
+  }
+  if (p.startsWith("/api/admin/lots/") && method === "PUT") {
+    const id = decodeURIComponent(p.split("/").pop());
+    const lot = DEMO.lots.find((l) => l.lot_id === id);
+    if (!lot) throw new Error("Lot not found");
+    lot.name = body.name; lot.address = body.address || ""; lot.total_spots = body.total_spots || 0;
+    return { ok: true };
+  }
+  if (p.startsWith("/api/admin/lots/") && method === "DELETE") {
+    const id = decodeURIComponent(p.split("/").pop());
+    DEMO.lots = DEMO.lots.filter((l) => l.lot_id !== id);
+    delete DEMO.spots[id];
+    return { ok: true };
+  }
+  if (p === "/api/admin/spots" && method === "GET") {
+    return { lot_id: qLot, spots: demoSpotsOf(qLot).map((s) => ({ id: s.id, status: s.status, score: s.score, out_of_service: s.out_of_service })) };
+  }
+  if (p === "/api/admin/spots" && method === "POST") {
+    const arr = DEMO.spots[body.lot_id] = DEMO.spots[body.lot_id] || [];
+    if (arr.some((s) => s.id === body.spot_id)) throw new Error("That spot already exists in this lot");
+    arr.push({ id: body.spot_id, status: "free", out_of_service: false, score: 0 });
+    return { ok: true };
+  }
+  if (p === "/api/admin/spots" && method === "DELETE") {
+    DEMO.spots[body.lot_id] = demoSpotsOf(body.lot_id).filter((s) => s.id !== body.spot_id);
+    return { ok: true };
+  }
+  if (p === "/api/admin/spots/status" && method === "POST") {
+    const s = demoSpotsOf(body.lot_id).find((x) => x.id === body.spot_id);
+    if (!s) throw new Error("Spot not found");
+    if (body.action === "out_of_service") s.out_of_service = true;
+    else if (body.action === "in_service") s.out_of_service = false;
+    else if (body.action === "free" || body.action === "occupied") { s.status = body.action; s.out_of_service = false; }
+    return { ok: true };
+  }
+  throw new Error(`Demo: unhandled ${method} ${p}`);
+}
+
 async function boot() {
   const token = getToken();
+  if (token === DEMO_TOKEN) { enterDemo(); return; }
   if (token) {
     try {
       const { user } = await api("/api/auth/me");
@@ -75,6 +215,8 @@ async function handleLogin(e) {
   const email = document.getElementById("email").value.trim();
   const password = document.getElementById("password").value;
   state.loginError = "";
+  // Offline preview credentials short-circuit the network entirely.
+  if (email.toLowerCase() === DEMO.email && password === DEMO.password) { enterDemo(); return; }
   state.loginBusy = true;
   render();
   try {
@@ -96,7 +238,9 @@ async function handleLogin(e) {
     afterEnterDashboard();
   } catch (err) {
     state.loginBusy = false;
-    state.loginError = err.message;
+    state.loginError = /failed to fetch|networkerror|load failed/i.test(err.message)
+      ? `Can't reach the server. To preview offline, sign in with ${DEMO.email} / ${DEMO.password}.`
+      : err.message;
     render();
   }
 }
@@ -104,6 +248,7 @@ async function handleLogin(e) {
 function logout() {
   clearToken();
   if (socket) { try { socket.disconnect(); } catch {} socket = null; }
+  state.demo = false;
   state.user = null;
   state.overview = null;
   state.spots = [];
@@ -130,9 +275,14 @@ async function loadOverview() {
 
 async function loadSpots() {
   try {
-    const res = await fetch(`/api/spots?lot_id=${encodeURIComponent(state.lotId)}`);
-    if (!res.ok) return;
-    const data = await res.json();
+    let data;
+    if (state.demo) {
+      data = await demoApi(`/api/spots?lot_id=${encodeURIComponent(state.lotId)}`);
+    } else {
+      const res = await fetch(`/api/spots?lot_id=${encodeURIComponent(state.lotId)}`);
+      if (!res.ok) return;
+      data = await res.json();
+    }
     state.spots = (data.spots || []).slice().sort(spotSort);
     if (state.view === "overview") renderLotMap();
   } catch {}
@@ -227,6 +377,7 @@ function mapLegendHTML() {
 // Socket — live spot updates
 // ---------------------------------------------------------------------------
 function connectSocket() {
+  if (state.demo) { state.socketConnected = false; updateLiveDot(); return; }  // no server in demo
   if (socket) return;
   try {
     socket = io();
@@ -346,6 +497,10 @@ function loginHTML() {
           ${state.loginBusy ? "Signing in…" : "Sign in"}
         </button>
         ${state.loginError ? `<div class="alert">${escapeHtml(state.loginError)}</div>` : ""}
+        <div class="demo-hint">
+          <button type="button" class="btn-ghost btn" onclick="enterDemo()">Open demo dashboard (no server)</button>
+          <div class="demo-creds">or sign in with <b>${DEMO.email}</b> / <b>${DEMO.password}</b></div>
+        </div>
       </form>
     </div>`;
 }
@@ -371,8 +526,8 @@ function shellHTML() {
         <header class="topbar">
           <h1>${VIEW_TITLES[state.view] || ""}</h1>
           <span class="spacer"></span>
-          <span class="live-dot ${state.socketConnected ? "" : "off"}" id="liveDot">
-            <span class="dot"></span>${state.socketConnected ? "Live" : "Offline"}
+          <span class="${liveDotState().cls}" id="liveDot">
+            <span class="dot"></span>${liveDotState().txt}
           </span>
           <div class="user-chip">
             <div class="avatar">${initials(state.user?.name || "A")}</div>
@@ -753,11 +908,16 @@ function updateKpis() {
   const sum = document.getElementById("lotSummary");
   if (sum) sum.innerHTML = lotSummaryHTML();
 }
+function liveDotState() {
+  if (state.demo) return { cls: "live-dot demo", txt: "Demo" };
+  return state.socketConnected ? { cls: "live-dot", txt: "Live" } : { cls: "live-dot off", txt: "Offline" };
+}
 function updateLiveDot() {
   const el = document.getElementById("liveDot");
   if (!el) return;
-  el.className = `live-dot ${state.socketConnected ? "" : "off"}`;
-  el.innerHTML = `<span class="dot"></span>${state.socketConnected ? "Live" : "Offline"}`;
+  const d = liveDotState();
+  el.className = d.cls;
+  el.innerHTML = `<span class="dot"></span>${d.txt}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -780,6 +940,7 @@ function escapeAttr(s) { return escapeHtml(s).replace(/`/g, "&#96;"); }
 // expose handlers used in inline attributes
 window.navigate = navigate;
 window.logout = logout;
+window.enterDemo = enterDemo;
 window.selectManageLot = selectManageLot;
 window.openSpotModal = openSpotModal;
 window.openLotModal = openLotModal;
