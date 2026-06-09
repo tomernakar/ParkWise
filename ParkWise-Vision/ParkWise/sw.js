@@ -1,4 +1,4 @@
-const CACHE = 'parkwise-v1';
+const CACHE = 'parkwise-v6';
 const SHELL = [
   './index.html',
   './ParkWise logo.png',
