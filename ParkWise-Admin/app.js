@@ -17,11 +17,13 @@ const state = {
   loginError: "",
   loginBusy: false,
   booting: true,
+  demo: false,            // offline preview mode (no backend)
   // Spots & Lots management
   lots: [],
   adminSpots: [],         // /api/admin/spots for the managed lot
   manageLotId: null,
   modal: null,            // { type, ... }
+  activity: [],           // recent live spot changes for the Overview feed
 };
 
 let socket = null;
@@ -34,6 +36,7 @@ const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
 const clearToken = () => localStorage.removeItem(TOKEN_KEY);
 
 async function api(path, opts = {}) {
+  if (state.demo) return demoApi(path, opts);   // offline preview — no network
   const token = getToken();
   const headers = {
     "Content-Type": "application/json",
@@ -47,8 +50,152 @@ async function api(path, opts = {}) {
   return data;
 }
 
+// ---------------------------------------------------------------------------
+// Demo mode — a full in-browser mock of the admin API so the dashboard can be
+// previewed by opening index.html directly (file://), with no backend or DB.
+// ---------------------------------------------------------------------------
+const DEMO_TOKEN = "demo-mode";
+const DEMO = {
+  email: "admin@parkwise.app",
+  password: "admin123",
+  user: { id: 0, name: "Demo Admin", email: "admin@parkwise.app", role: "admin" },
+  lots: [],
+  spots: {},   // lot_id -> [ { id, status, out_of_service, score } ]
+};
+
+function demoInit() {
+  DEMO.lots = [
+    { lot_id: "demo_lot_1", name: "Exelerator Demo Lot", address: "Exelerator Campus, Level 1", total_spots: 27 },
+  ];
+  const occupied = new Set(["S2", "S3", "S5", "S7", "S9", "S11", "S15", "S20", "S24"]);
+  const oos = new Set(["S13"]);
+  DEMO.spots = {
+    demo_lot_1: Object.keys(LAYOUT).map((id) => ({
+      id,
+      status: occupied.has(id) ? "occupied" : "free",
+      out_of_service: oos.has(id),
+      score: occupied.has(id) ? 28 + Math.round(Math.random() * 12) : Math.round(Math.random() * 8),
+    })),
+  };
+}
+
+function enterDemo() {
+  state.demo = true;
+  demoInit();
+  setToken(DEMO_TOKEN);
+  state.user = { ...DEMO.user };
+  state.loginError = "";
+  state.loginBusy = false;
+  state.booting = false;
+  state.view = "overview";
+  state.lotId = DEFAULT_LOT_ID;
+  state.manageLotId = DEFAULT_LOT_ID;
+  // Seed the activity feed so the offline preview looks alive.
+  const t = nowTime();
+  state.activity = [
+    { id: "S9", status: "occupied", time: t }, { id: "S14", status: "free", time: t },
+    { id: "S20", status: "occupied", time: t }, { id: "S13", status: "out_of_service", time: t },
+  ];
+  render();
+  afterEnterDashboard();
+}
+
+const demoSpotsOf = (lotId) => DEMO.spots[lotId] || [];
+function demoLotsWithCounts() {
+  return DEMO.lots.map((l) => {
+    const ss = demoSpotsOf(l.lot_id);
+    return {
+      ...l,
+      spot_count: ss.length,
+      occupied: ss.filter((s) => s.status === "occupied" && !s.out_of_service).length,
+      free: ss.filter((s) => s.status === "free" && !s.out_of_service).length,
+      out_of_service: ss.filter((s) => s.out_of_service).length,
+    };
+  });
+}
+function demoOverview(lotId) {
+  const ss = demoSpotsOf(lotId);
+  const occupied = ss.filter((s) => s.status === "occupied" && !s.out_of_service).length;
+  const out = ss.filter((s) => s.out_of_service).length;
+  const free = ss.filter((s) => s.status === "free" && !s.out_of_service).length;
+  const total = ss.length;
+  const serviceable = total - out;
+  return {
+    lot_id: lotId,
+    timestamp: new Date().toISOString(),
+    users: { total: 128, admins: 2 },
+    sessions: { active: 14 },
+    reports: { open: 3 },
+    occupancy: {
+      total, occupied, free, out_of_service: out, serviceable,
+      by_status: { free, occupied, out_of_service: out },
+      percent: serviceable ? Math.round((occupied / serviceable) * 100) : 0,
+    },
+  };
+}
+
+async function demoApi(path, opts = {}) {
+  const method = (opts.method || "GET").toUpperCase();
+  const body = opts.body ? JSON.parse(opts.body) : {};
+  const u = new URL(path, "http://demo.local");
+  const p = u.pathname;
+  const qLot = u.searchParams.get("lot_id") || DEFAULT_LOT_ID;
+
+  if (p === "/api/auth/me") return { user: { ...DEMO.user } };
+  if (p === "/api/admin/overview") return demoOverview(qLot);
+  if (p === "/api/spots") {
+    return { lot_id: qLot, spots: demoSpotsOf(qLot).map((s) => ({
+      id: s.id, status: s.out_of_service ? "out_of_service" : s.status,
+      raw_status: s.status, out_of_service: s.out_of_service, score: s.score,
+    })) };
+  }
+  if (p === "/api/admin/lots" && method === "GET") return { lots: demoLotsWithCounts() };
+  if (p === "/api/admin/lots" && method === "POST") {
+    if (DEMO.lots.some((l) => l.lot_id === body.lot_id)) throw new Error("A lot with that id already exists");
+    DEMO.lots.push({ lot_id: body.lot_id, name: body.name, address: body.address || "", total_spots: body.total_spots || 0 });
+    DEMO.spots[body.lot_id] = DEMO.spots[body.lot_id] || [];
+    return { ok: true };
+  }
+  if (p.startsWith("/api/admin/lots/") && method === "PUT") {
+    const id = decodeURIComponent(p.split("/").pop());
+    const lot = DEMO.lots.find((l) => l.lot_id === id);
+    if (!lot) throw new Error("Lot not found");
+    lot.name = body.name; lot.address = body.address || ""; lot.total_spots = body.total_spots || 0;
+    return { ok: true };
+  }
+  if (p.startsWith("/api/admin/lots/") && method === "DELETE") {
+    const id = decodeURIComponent(p.split("/").pop());
+    DEMO.lots = DEMO.lots.filter((l) => l.lot_id !== id);
+    delete DEMO.spots[id];
+    return { ok: true };
+  }
+  if (p === "/api/admin/spots" && method === "GET") {
+    return { lot_id: qLot, spots: demoSpotsOf(qLot).map((s) => ({ id: s.id, status: s.status, score: s.score, out_of_service: s.out_of_service })) };
+  }
+  if (p === "/api/admin/spots" && method === "POST") {
+    const arr = DEMO.spots[body.lot_id] = DEMO.spots[body.lot_id] || [];
+    if (arr.some((s) => s.id === body.spot_id)) throw new Error("That spot already exists in this lot");
+    arr.push({ id: body.spot_id, status: "free", out_of_service: false, score: 0 });
+    return { ok: true };
+  }
+  if (p === "/api/admin/spots" && method === "DELETE") {
+    DEMO.spots[body.lot_id] = demoSpotsOf(body.lot_id).filter((s) => s.id !== body.spot_id);
+    return { ok: true };
+  }
+  if (p === "/api/admin/spots/status" && method === "POST") {
+    const s = demoSpotsOf(body.lot_id).find((x) => x.id === body.spot_id);
+    if (!s) throw new Error("Spot not found");
+    if (body.action === "out_of_service") s.out_of_service = true;
+    else if (body.action === "in_service") s.out_of_service = false;
+    else if (body.action === "free" || body.action === "occupied") { s.status = body.action; s.out_of_service = false; }
+    return { ok: true };
+  }
+  throw new Error(`Demo: unhandled ${method} ${p}`);
+}
+
 async function boot() {
   const token = getToken();
+  if (token === DEMO_TOKEN) { enterDemo(); return; }
   if (token) {
     try {
       const { user } = await api("/api/auth/me");
@@ -75,6 +222,8 @@ async function handleLogin(e) {
   const email = document.getElementById("email").value.trim();
   const password = document.getElementById("password").value;
   state.loginError = "";
+  // Offline preview credentials short-circuit the network entirely.
+  if (email.toLowerCase() === DEMO.email && password === DEMO.password) { enterDemo(); return; }
   state.loginBusy = true;
   render();
   try {
@@ -96,7 +245,9 @@ async function handleLogin(e) {
     afterEnterDashboard();
   } catch (err) {
     state.loginBusy = false;
-    state.loginError = err.message;
+    state.loginError = /failed to fetch|networkerror|load failed/i.test(err.message)
+      ? `Can't reach the server. To preview offline, sign in with ${DEMO.email} / ${DEMO.password}.`
+      : err.message;
     render();
   }
 }
@@ -104,6 +255,7 @@ async function handleLogin(e) {
 function logout() {
   clearToken();
   if (socket) { try { socket.disconnect(); } catch {} socket = null; }
+  state.demo = false;
   state.user = null;
   state.overview = null;
   state.spots = [];
@@ -130,9 +282,14 @@ async function loadOverview() {
 
 async function loadSpots() {
   try {
-    const res = await fetch(`/api/spots?lot_id=${encodeURIComponent(state.lotId)}`);
-    if (!res.ok) return;
-    const data = await res.json();
+    let data;
+    if (state.demo) {
+      data = await demoApi(`/api/spots?lot_id=${encodeURIComponent(state.lotId)}`);
+    } else {
+      const res = await fetch(`/api/spots?lot_id=${encodeURIComponent(state.lotId)}`);
+      if (!res.ok) return;
+      data = await res.json();
+    }
     state.spots = (data.spots || []).slice().sort(spotSort);
     if (state.view === "overview") renderLotMap();
   } catch {}
@@ -174,20 +331,29 @@ function lotUsesMap(lotId, spots) {
   return spots.some((s) => LAYOUT_IDS.has(s.id));
 }
 
+// Desktop rendering rotates the portrait lot 90° counter-clockwise so spot
+// numbers read left→right on a wide panel: (x,y,w,h) → (y, SV.w − x − w, h, w).
+// S1–S10 run along the bottom, S11–S20 along the top, entry gate on the right.
+const SVL = { w: SV.h, h: SV.w };   // 440 × 300
+const LAYOUT_LS = Object.fromEntries(Object.entries(LAYOUT).map(([id, g]) => [
+  id, { x: g.y, y: SV.w - g.x - g.w, w: g.h, h: g.w, type: g.type },
+]));
+
 function lotMapSvg(spots, opts = {}) {
   const clickable = !!opts.clickable;
   const byId = new Map(spots.map((s) => [s.id, s]));
-  let svg = `<svg viewBox="0 0 ${SV.w} ${SV.h}" class="lotsvg" role="img" aria-label="Parking lot map">`;
-  // Boundary U-shape + center islands + entry + lane arrows (identical to the app)
-  svg += `<path d="M 3,8 L 3,418 Q 3,437 22,437 L 278,437 Q 297,437 297,418 L 297,8" fill="#071017" stroke="rgba(255,255,255,.12)" stroke-width="1.5"/>`;
-  svg += `<rect x="127" y="72" width="46" height="136" rx="8" fill="rgba(255,255,255,.03)" stroke="rgba(255,255,255,.08)" stroke-width="0.8"/>`;
-  svg += `<rect x="127" y="232" width="46" height="176" rx="8" fill="rgba(255,255,255,.03)" stroke="rgba(255,255,255,.08)" stroke-width="0.8"/>`;
-  svg += `<rect x="138" y="432" width="24" height="5" rx="2" fill="rgba(41,199,172,.92)"/>`;
-  svg += `<text x="150" y="426" text-anchor="middle" font-size="7" fill="rgba(41,199,172,.9)" font-family="IBM Plex Mono,monospace">ENTRY</text>`;
-  svg += `<text x="68" y="260" text-anchor="middle" font-size="8" fill="rgba(255,255,255,.12)" font-family="IBM Plex Mono,monospace" transform="rotate(-90 68 260)">&#9650; &#9650; &#9650; &#9650;</text>`;
-  svg += `<text x="232" y="200" text-anchor="middle" font-size="8" fill="rgba(255,255,255,.12)" font-family="IBM Plex Mono,monospace" transform="rotate(90 232 200)">&#9650; &#9650; &#9650; &#9650;</text>`;
+  let svg = `<svg viewBox="0 0 ${SVL.w} ${SVL.h}" class="lotsvg" role="img" aria-label="Parking lot map">`;
+  // Boundary U-shape (rotated), center islands, entry gate, lane arrows
+  svg += `<path d="M 8,297 L 418,297 Q 437,297 437,278 L 437,22 Q 437,3 418,3 L 8,3" fill="#071017" stroke="rgba(255,255,255,.12)" stroke-width="1.5"/>`;
+  svg += `<rect x="72" y="127" width="136" height="46" rx="8" fill="rgba(255,255,255,.03)" stroke="rgba(255,255,255,.08)" stroke-width="0.8"/>`;
+  svg += `<rect x="232" y="127" width="176" height="46" rx="8" fill="rgba(255,255,255,.03)" stroke="rgba(255,255,255,.08)" stroke-width="0.8"/>`;
+  svg += `<rect x="432" y="138" width="5" height="24" rx="2" fill="rgba(41,199,172,.92)"/>`;
+  svg += `<text x="426" y="150" text-anchor="middle" font-size="7" fill="rgba(41,199,172,.9)" font-family="IBM Plex Mono,monospace" transform="rotate(90 426 150)">ENTRY</text>`;
+  // Top lane flows right, bottom lane flows left (mirrors the app's circulation)
+  svg += `<text x="200" y="71" text-anchor="middle" font-size="8" fill="rgba(255,255,255,.12)" font-family="IBM Plex Mono,monospace" transform="rotate(90 200 68)">&#9650; &#9650; &#9650; &#9650;</text>`;
+  svg += `<text x="240" y="235" text-anchor="middle" font-size="8" fill="rgba(255,255,255,.12)" font-family="IBM Plex Mono,monospace" transform="rotate(-90 240 232)">&#9650; &#9650; &#9650; &#9650;</text>`;
 
-  Object.entries(LAYOUT).forEach(([id, g]) => {
+  Object.entries(LAYOUT_LS).forEach(([id, g]) => {
     const s = byId.get(id);
     const present = !!s;
     const oos = !!(s && s.out_of_service);
@@ -200,14 +366,23 @@ function lotMapSvg(spots, opts = {}) {
     else if (g.type === "accessible") { fill = "rgba(96,165,250,.24)"; stroke = "rgba(96,165,250,.92)"; }
 
     const cx = g.x + g.w / 2, cy = g.y + g.h / 2;
-    const click = clickable && present ? ` data-spot="${escapeAttr(id)}" onclick="openSpotModal('${escapeAttr(id)}')" style="cursor:pointer"` : "";
-    svg += `<rect class="mspot"${click} x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="2.5" fill="${fill}" stroke="${stroke}" stroke-width="1.1"/>`;
-    // Spot id label (admins need to identify spots). Type still shown via colour.
+    const statusLabel = !present ? "untracked" : oos ? "out of service" : raw;
+    const tip = `${id} · ${statusLabel}${present && s.score != null ? ` · score ${Math.round(s.score)}` : ""}`;
+    const interactive = clickable && present;
+    const click = interactive
+      ? ` data-spot="${escapeAttr(id)}" onclick="openSpotModal('${escapeAttr(id)}')" onkeydown="if(event.key==='Enter')openSpotModal('${escapeAttr(id)}')" tabindex="0" role="button" aria-label="${escapeAttr(tip)}" style="cursor:pointer"`
+      : "";
+    svg += `<rect class="mspot"${click} x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="2.5" fill="${fill}" stroke="${stroke}" stroke-width="1.1"><title>${escapeHtml(tip)}</title></rect>`;
+    // Stalls are tall in landscape — id on one line, ✕ marker below for OOS.
     const lblColor = !present ? "rgba(255,255,255,.25)"
       : oos ? "rgba(255,255,255,.5)"
       : raw === "occupied" ? "rgba(255,210,214,.95)" : "rgba(235,245,242,.92)";
-    const txt = oos ? `${id} ✕` : id;
-    svg += `<text x="${cx}" y="${cy + 2.3}" text-anchor="middle" font-size="6.2" font-weight="700" fill="${lblColor}" font-family="IBM Plex Mono,monospace" pointer-events="none">${escapeHtml(txt)}</text>`;
+    if (oos) {
+      svg += `<text x="${cx}" y="${cy - 1}" text-anchor="middle" font-size="6.2" font-weight="700" fill="${lblColor}" font-family="IBM Plex Mono,monospace" pointer-events="none">${escapeHtml(id)}</text>`;
+      svg += `<text x="${cx}" y="${cy + 8}" text-anchor="middle" font-size="6.5" font-weight="700" fill="${lblColor}" pointer-events="none">✕</text>`;
+    } else {
+      svg += `<text x="${cx}" y="${cy + 2.3}" text-anchor="middle" font-size="6.2" font-weight="700" fill="${lblColor}" font-family="IBM Plex Mono,monospace" pointer-events="none">${escapeHtml(id)}</text>`;
+    }
   });
   svg += `</svg>`;
   return svg;
@@ -227,6 +402,7 @@ function mapLegendHTML() {
 // Socket — live spot updates
 // ---------------------------------------------------------------------------
 function connectSocket() {
+  if (state.demo) { state.socketConnected = false; updateLiveDot(); return; }  // no server in demo
   if (socket) return;
   try {
     socket = io();
@@ -235,20 +411,32 @@ function connectSocket() {
     socket.on("spots:update", ({ lot_id, spots }) => {
       if (lot_id && lot_id !== state.lotId) return;
       const byId = new Map(state.spots.map((s) => [s.id, s]));
-      const changed = [];
+      const changed = [];   // { id, status } for spots whose effective status changed
       (spots || []).forEach((s) => {
+        // s.status is the effective status broadcast by the server.
+        const applyEffective = (obj) => {
+          if (s.status === "out_of_service") obj.out_of_service = true;
+          else { obj.out_of_service = false; obj.raw_status = s.status; }
+          obj.status = s.status;
+          if (s.score != null) obj.score = s.score;
+        };
         const cur = byId.get(s.id);
         if (cur) {
-          if (cur.status !== s.status) { cur.status = s.status; changed.push(s.id); }
-          cur.score = s.score;
+          if (cur.status !== s.status) { applyEffective(cur); changed.push({ id: s.id, status: s.status }); }
+          else if (s.score != null) cur.score = s.score;
         } else {
-          state.spots.push({ id: s.id, status: s.status, score: s.score });
-          changed.push(s.id);
+          const obj = { id: s.id }; applyEffective(obj);
+          state.spots.push(obj);
+          changed.push({ id: s.id, status: s.status });
         }
       });
       if (!changed.length) return;
+      // Record for the live activity feed (newest first).
+      const t = nowTime();
+      changed.forEach((c) => state.activity.unshift({ id: c.id, status: c.status, time: t }));
+      state.activity = state.activity.slice(0, 30);
       state.spots.sort(spotSort);
-      if (state.view === "overview") { renderLotMap(); recomputeOccupancy(); }
+      if (state.view === "overview") { renderLotMap(); recomputeOccupancy(); renderActivity(); }
       // Keep the management map honest if it's open for this lot.
       if (state.view === "spots" && lot_id === state.manageLotId) loadAdminSpots(state.manageLotId).then(render);
     });
@@ -346,6 +534,10 @@ function loginHTML() {
           ${state.loginBusy ? "Signing in…" : "Sign in"}
         </button>
         ${state.loginError ? `<div class="alert">${escapeHtml(state.loginError)}</div>` : ""}
+        <div class="demo-hint">
+          <button type="button" class="btn-ghost btn" onclick="enterDemo()">Open demo dashboard (no server)</button>
+          <div class="demo-creds">or sign in with <b>${DEMO.email}</b> / <b>${DEMO.password}</b></div>
+        </div>
       </form>
     </div>`;
 }
@@ -371,8 +563,8 @@ function shellHTML() {
         <header class="topbar">
           <h1>${VIEW_TITLES[state.view] || ""}</h1>
           <span class="spacer"></span>
-          <span class="live-dot ${state.socketConnected ? "" : "off"}" id="liveDot">
-            <span class="dot"></span>${state.socketConnected ? "Live" : "Offline"}
+          <span class="${liveDotState().cls}" id="liveDot">
+            <span class="dot"></span>${liveDotState().txt}
           </span>
           <div class="user-chip">
             <div class="avatar">${initials(state.user?.name || "A")}</div>
@@ -467,11 +659,25 @@ function managedSpotsHTML() {
   const useMap = lotUsesMap(state.manageLotId, state.adminSpots);
   if (useMap) {
     const extra = state.adminSpots.filter((s) => !LAYOUT_IDS.has(s.id));
+    const free = state.adminSpots.filter((s) => !s.out_of_service && s.status === "free").length;
+    const occ = state.adminSpots.filter((s) => !s.out_of_service && s.status === "occupied").length;
+    const oos = state.adminSpots.filter((s) => s.out_of_service).length;
     return `
-      <div class="lotmap-wrap">${lotMapSvg(state.adminSpots, { clickable: true })}</div>
-      <div class="lotmap" style="margin-top:16px">
-        ${extra.map(adminSpotTileHTML).join("")}
-        <div class="spot add" onclick="addSpotPrompt()" title="Add spot">＋</div>
+      <div class="spots-main">
+        <div class="lotmap-wrap">${lotMapSvg(state.adminSpots, { clickable: true })}</div>
+        <div class="spots-side">
+          <div class="stat-grid">
+            <div class="ministat free"><div class="n">${free}</div><div class="l">Free</div></div>
+            <div class="ministat occ"><div class="n">${occ}</div><div class="l">Occupied</div></div>
+            <div class="ministat oos"><div class="n">${oos}</div><div class="l">Out of service</div></div>
+          </div>
+          <p class="side-hint">Click any spot on the map to set it free or occupied, mark it out of service, or remove it. Out-of-service overrides stay sticky even when the camera reports a change.</p>
+          <div class="side-sub">${extra.length ? "Extra spots (off-layout)" : "Add a spot"}</div>
+          <div class="lotmap">
+            ${extra.map(adminSpotTileHTML).join("")}
+            <div class="spot add" onclick="addSpotPrompt()" title="Add spot">＋</div>
+          </div>
+        </div>
       </div>`;
   }
   return `
@@ -654,19 +860,72 @@ async function deleteLot(lotId) {
 function overviewHTML() {
   return `
     <section class="kpi-grid" id="kpiGrid">${kpiCardsHTML()}</section>
-    <section class="two-col">
+    <section class="ov-main">
       <div class="card panel">
         <div class="panel-head">
           <h3>Live lot map · <span class="mono" style="color:var(--muted)">${escapeHtml(state.lotId)}</span></h3>
-          ${mapLegendHTML()}
         </div>
         <div id="lotmap">${overviewMapHTML()}</div>
+        <div style="margin-top:16px">${mapLegendHTML()}</div>
       </div>
-      <div class="card panel">
-        <div class="panel-head"><h3>Lot summary</h3></div>
-        <div id="lotSummary">${lotSummaryHTML()}</div>
+      <div class="rail">
+        <div class="rail-2">
+          <div class="card panel">
+            <div class="panel-head"><h3>Lot summary</h3></div>
+            <div id="lotSummary">${lotSummaryHTML()}</div>
+          </div>
+          <div class="card panel">
+            <div class="panel-head"><h3>Occupancy by type</h3></div>
+            <div id="occByType">${occByTypeHTML()}</div>
+          </div>
+        </div>
+        <div class="card panel">
+          <div class="panel-head">
+            <h3>Live activity</h3>
+            <span style="font-size:11px;color:var(--faint)">recent spot changes</span>
+          </div>
+          <div id="activityFeed">${activityFeedHTML()}</div>
+        </div>
       </div>
     </section>`;
+}
+
+// Occupancy split by spot type (regular / EV / accessible), from the lot layout.
+function occByTypeHTML() {
+  const colors = { regular: "var(--success)", ev: "var(--warn)", accessible: "var(--info)" };
+  const labels = { regular: "Regular", ev: "Electric", accessible: "Accessible" };
+  const buckets = { regular: { total: 0, free: 0 }, ev: { total: 0, free: 0 }, accessible: { total: 0, free: 0 } };
+  state.spots.forEach((s) => {
+    const t = LAYOUT[s.id]?.type;
+    if (!t || !buckets[t]) return;
+    buckets[t].total++;
+    if (!s.out_of_service && (s.raw_status ?? s.status) === "free") buckets[t].free++;
+  });
+  const rows = Object.keys(buckets).map((t) => {
+    const b = buckets[t];
+    const pct = b.total ? Math.round((b.free / b.total) * 100) : 0;
+    return `<div class="typerow">
+      <span class="swatch" style="background:${colors[t]}"></span>
+      <span class="tname">${labels[t]}</span>
+      <span class="tbar"><i style="width:${pct}%;background:${colors[t]}"></i></span>
+      <span class="tnum">${b.free}/${b.total} free</span>
+    </div>`;
+  }).join("");
+  return rows || `<div class="empty">No spot data.</div>`;
+}
+
+function activityFeedHTML() {
+  if (!state.activity.length) {
+    return `<div class="empty">${state.socketConnected ? "Watching for spot changes…" : "No recent activity."}</div>`;
+  }
+  const color = (st) => st === "occupied" ? "var(--danger)" : st === "out_of_service" ? "var(--faint)" : "var(--success)";
+  const verb = (st) => st === "occupied" ? "was taken" : st === "out_of_service" ? "went out of service" : "opened up";
+  return `<div class="feed">${state.activity.slice(0, 8).map((a) => `
+    <div class="feed-row">
+      <span class="feed-dot" style="background:${color(a.status)}"></span>
+      <span class="ftxt"><b>${escapeHtml(a.id)}</b> ${verb(a.status)}</span>
+      <span class="ftime">${a.time}</span>
+    </div>`).join("")}</div>`;
 }
 
 function kpiCardsHTML() {
@@ -729,13 +988,23 @@ function renderLotMap() {
   const el = document.getElementById("lotmap");
   if (el) el.innerHTML = overviewMapHTML();
 }
+function renderActivity() {
+  const el = document.getElementById("activityFeed");
+  if (el) el.innerHTML = activityFeedHTML();
+}
+// Local occupancy recompute between server refreshes — mirrors the server's
+// "percent of serviceable spaces" math so out-of-service spots don't count.
 function recomputeOccupancy() {
   if (!state.overview) return;
-  const total = state.spots.length;
-  const occupied = occupiedCount();
-  const free = total - occupied;
-  const percent = total ? Math.round((occupied / total) * 100) : 0;
-  state.overview.occupancy = { ...state.overview.occupancy, total, occupied, free, percent };
+  let total = state.spots.length, occupied = 0, oos = 0;
+  state.spots.forEach((s) => {
+    if (s.out_of_service || s.status === "out_of_service") { oos++; return; }
+    if ((s.raw_status ?? s.status) === "occupied") occupied++;
+  });
+  const serviceable = total - oos;
+  const free = serviceable - occupied;
+  const percent = serviceable ? Math.round((occupied / serviceable) * 100) : 0;
+  state.overview.occupancy = { ...state.overview.occupancy, total, occupied, free, out_of_service: oos, serviceable, percent };
   updateKpis();
 }
 function updateKpis() {
@@ -752,12 +1021,19 @@ function updateKpis() {
   setText("reportsVal", o.reports?.open ?? 0);
   const sum = document.getElementById("lotSummary");
   if (sum) sum.innerHTML = lotSummaryHTML();
+  const byType = document.getElementById("occByType");
+  if (byType) byType.innerHTML = occByTypeHTML();
+}
+function liveDotState() {
+  if (state.demo) return { cls: "live-dot demo", txt: "Demo" };
+  return state.socketConnected ? { cls: "live-dot", txt: "Live" } : { cls: "live-dot off", txt: "Offline" };
 }
 function updateLiveDot() {
   const el = document.getElementById("liveDot");
   if (!el) return;
-  el.className = `live-dot ${state.socketConnected ? "" : "off"}`;
-  el.innerHTML = `<span class="dot"></span>${state.socketConnected ? "Live" : "Offline"}`;
+  const d = liveDotState();
+  el.className = d.cls;
+  el.innerHTML = `<span class="dot"></span>${d.txt}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -780,6 +1056,7 @@ function escapeAttr(s) { return escapeHtml(s).replace(/`/g, "&#96;"); }
 // expose handlers used in inline attributes
 window.navigate = navigate;
 window.logout = logout;
+window.enterDemo = enterDemo;
 window.selectManageLot = selectManageLot;
 window.openSpotModal = openSpotModal;
 window.openLotModal = openLotModal;
