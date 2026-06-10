@@ -331,20 +331,29 @@ function lotUsesMap(lotId, spots) {
   return spots.some((s) => LAYOUT_IDS.has(s.id));
 }
 
+// Desktop rendering rotates the portrait lot 90° counter-clockwise so spot
+// numbers read left→right on a wide panel: (x,y,w,h) → (y, SV.w − x − w, h, w).
+// S1–S10 run along the bottom, S11–S20 along the top, entry gate on the right.
+const SVL = { w: SV.h, h: SV.w };   // 440 × 300
+const LAYOUT_LS = Object.fromEntries(Object.entries(LAYOUT).map(([id, g]) => [
+  id, { x: g.y, y: SV.w - g.x - g.w, w: g.h, h: g.w, type: g.type },
+]));
+
 function lotMapSvg(spots, opts = {}) {
   const clickable = !!opts.clickable;
   const byId = new Map(spots.map((s) => [s.id, s]));
-  let svg = `<svg viewBox="0 0 ${SV.w} ${SV.h}" class="lotsvg" role="img" aria-label="Parking lot map">`;
-  // Boundary U-shape + center islands + entry + lane arrows (identical to the app)
-  svg += `<path d="M 3,8 L 3,418 Q 3,437 22,437 L 278,437 Q 297,437 297,418 L 297,8" fill="#071017" stroke="rgba(255,255,255,.12)" stroke-width="1.5"/>`;
-  svg += `<rect x="127" y="72" width="46" height="136" rx="8" fill="rgba(255,255,255,.03)" stroke="rgba(255,255,255,.08)" stroke-width="0.8"/>`;
-  svg += `<rect x="127" y="232" width="46" height="176" rx="8" fill="rgba(255,255,255,.03)" stroke="rgba(255,255,255,.08)" stroke-width="0.8"/>`;
-  svg += `<rect x="138" y="432" width="24" height="5" rx="2" fill="rgba(41,199,172,.92)"/>`;
-  svg += `<text x="150" y="426" text-anchor="middle" font-size="7" fill="rgba(41,199,172,.9)" font-family="IBM Plex Mono,monospace">ENTRY</text>`;
-  svg += `<text x="68" y="260" text-anchor="middle" font-size="8" fill="rgba(255,255,255,.12)" font-family="IBM Plex Mono,monospace" transform="rotate(-90 68 260)">&#9650; &#9650; &#9650; &#9650;</text>`;
-  svg += `<text x="232" y="200" text-anchor="middle" font-size="8" fill="rgba(255,255,255,.12)" font-family="IBM Plex Mono,monospace" transform="rotate(90 232 200)">&#9650; &#9650; &#9650; &#9650;</text>`;
+  let svg = `<svg viewBox="0 0 ${SVL.w} ${SVL.h}" class="lotsvg" role="img" aria-label="Parking lot map">`;
+  // Boundary U-shape (rotated), center islands, entry gate, lane arrows
+  svg += `<path d="M 8,297 L 418,297 Q 437,297 437,278 L 437,22 Q 437,3 418,3 L 8,3" fill="#071017" stroke="rgba(255,255,255,.12)" stroke-width="1.5"/>`;
+  svg += `<rect x="72" y="127" width="136" height="46" rx="8" fill="rgba(255,255,255,.03)" stroke="rgba(255,255,255,.08)" stroke-width="0.8"/>`;
+  svg += `<rect x="232" y="127" width="176" height="46" rx="8" fill="rgba(255,255,255,.03)" stroke="rgba(255,255,255,.08)" stroke-width="0.8"/>`;
+  svg += `<rect x="432" y="138" width="5" height="24" rx="2" fill="rgba(41,199,172,.92)"/>`;
+  svg += `<text x="426" y="150" text-anchor="middle" font-size="7" fill="rgba(41,199,172,.9)" font-family="IBM Plex Mono,monospace" transform="rotate(90 426 150)">ENTRY</text>`;
+  // Top lane flows right, bottom lane flows left (mirrors the app's circulation)
+  svg += `<text x="200" y="71" text-anchor="middle" font-size="8" fill="rgba(255,255,255,.12)" font-family="IBM Plex Mono,monospace" transform="rotate(90 200 68)">&#9650; &#9650; &#9650; &#9650;</text>`;
+  svg += `<text x="240" y="235" text-anchor="middle" font-size="8" fill="rgba(255,255,255,.12)" font-family="IBM Plex Mono,monospace" transform="rotate(-90 240 232)">&#9650; &#9650; &#9650; &#9650;</text>`;
 
-  Object.entries(LAYOUT).forEach(([id, g]) => {
+  Object.entries(LAYOUT_LS).forEach(([id, g]) => {
     const s = byId.get(id);
     const present = !!s;
     const oos = !!(s && s.out_of_service);
@@ -357,14 +366,23 @@ function lotMapSvg(spots, opts = {}) {
     else if (g.type === "accessible") { fill = "rgba(96,165,250,.24)"; stroke = "rgba(96,165,250,.92)"; }
 
     const cx = g.x + g.w / 2, cy = g.y + g.h / 2;
-    const click = clickable && present ? ` data-spot="${escapeAttr(id)}" onclick="openSpotModal('${escapeAttr(id)}')" style="cursor:pointer"` : "";
-    svg += `<rect class="mspot"${click} x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="2.5" fill="${fill}" stroke="${stroke}" stroke-width="1.1"/>`;
-    // Spot id label (admins need to identify spots). Type still shown via colour.
+    const statusLabel = !present ? "untracked" : oos ? "out of service" : raw;
+    const tip = `${id} · ${statusLabel}${present && s.score != null ? ` · score ${Math.round(s.score)}` : ""}`;
+    const interactive = clickable && present;
+    const click = interactive
+      ? ` data-spot="${escapeAttr(id)}" onclick="openSpotModal('${escapeAttr(id)}')" onkeydown="if(event.key==='Enter')openSpotModal('${escapeAttr(id)}')" tabindex="0" role="button" aria-label="${escapeAttr(tip)}" style="cursor:pointer"`
+      : "";
+    svg += `<rect class="mspot"${click} x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="2.5" fill="${fill}" stroke="${stroke}" stroke-width="1.1"><title>${escapeHtml(tip)}</title></rect>`;
+    // Stalls are tall in landscape — id on one line, ✕ marker below for OOS.
     const lblColor = !present ? "rgba(255,255,255,.25)"
       : oos ? "rgba(255,255,255,.5)"
       : raw === "occupied" ? "rgba(255,210,214,.95)" : "rgba(235,245,242,.92)";
-    const txt = oos ? `${id} ✕` : id;
-    svg += `<text x="${cx}" y="${cy + 2.3}" text-anchor="middle" font-size="6.2" font-weight="700" fill="${lblColor}" font-family="IBM Plex Mono,monospace" pointer-events="none">${escapeHtml(txt)}</text>`;
+    if (oos) {
+      svg += `<text x="${cx}" y="${cy - 1}" text-anchor="middle" font-size="6.2" font-weight="700" fill="${lblColor}" font-family="IBM Plex Mono,monospace" pointer-events="none">${escapeHtml(id)}</text>`;
+      svg += `<text x="${cx}" y="${cy + 8}" text-anchor="middle" font-size="6.5" font-weight="700" fill="${lblColor}" pointer-events="none">✕</text>`;
+    } else {
+      svg += `<text x="${cx}" y="${cy + 2.3}" text-anchor="middle" font-size="6.2" font-weight="700" fill="${lblColor}" font-family="IBM Plex Mono,monospace" pointer-events="none">${escapeHtml(id)}</text>`;
+    }
   });
   svg += `</svg>`;
   return svg;
