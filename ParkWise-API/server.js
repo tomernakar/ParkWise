@@ -24,6 +24,10 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
 // parkwise_demo / campus split onto a single id.
 const DEFAULT_LOT_ID = process.env.DEFAULT_LOT_ID || 'demo_lot_1';
 
+// App reservations auto-expire so a spot isn't held forever if the driver
+// never arrives (the CV detector clears it sooner when the car is seen).
+const RESERVATION_TTL_MS = (parseInt(process.env.RESERVATION_TTL_MIN, 10) || 15) * 60 * 1000;
+
 function isAdminEmail(email) {
   return ADMIN_EMAILS.includes((email || '').trim().toLowerCase());
 }
@@ -105,12 +109,17 @@ async function initDB() {
         status     VARCHAR(20)  DEFAULT 'free',
         score      FLOAT        DEFAULT 0,
         out_of_service TINYINT(1) DEFAULT 0,
+        reserved_by INT          DEFAULT NULL,
+        reserved_at BIGINT       DEFAULT NULL,
         updated_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (lot_id, spot_id)
       )
     `);
     // Admin "out of service" flag — survives CV updates (CV only writes status/score).
     await ensureColumn(conn, 'parking_spots', 'out_of_service', 'TINYINT(1) DEFAULT 0');
+    // App reservations (driver assigned a spot, car not yet detected).
+    await ensureColumn(conn, 'parking_spots', 'reserved_by', 'INT DEFAULT NULL');
+    await ensureColumn(conn, 'parking_spots', 'reserved_at', 'BIGINT DEFAULT NULL');
     // Lots — let admins manage real lot metadata instead of hard-coding it.
     await conn.query(`
       CREATE TABLE IF NOT EXISTS parking_lots (
@@ -189,6 +198,39 @@ async function requireAdmin(req, res, next) {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+}
+
+// Attaches req.user if a valid token is present; otherwise continues as guest.
+function optionalAuth(req, res, next) {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (token) { try { req.user = jwt.verify(token, JWT_SECRET); } catch {} }
+  next();
+}
+
+// The single source of truth for what status the app/dashboard should show.
+// Admin out-of-service wins; an unexpired reservation shows as 'reserved'
+// unless the camera already reports the spot occupied.
+function effectiveStatus(row, now = Date.now()) {
+  if (row.out_of_service) return 'out_of_service';
+  const reserved = row.reserved_by != null && row.reserved_at != null &&
+    (now - Number(row.reserved_at) < RESERVATION_TTL_MS);
+  if (reserved && row.status !== 'occupied') return 'reserved';
+  return row.status;
+}
+
+// Normalise a parking_spots row into the shape every client consumes.
+function toApiSpot(row) {
+  const eff = effectiveStatus(row);
+  return {
+    id: row.spot_id != null ? row.spot_id : row.id,
+    status: eff,
+    raw_status: row.status,
+    out_of_service: !!row.out_of_service,
+    reserved: eff === 'reserved',
+    score: row.score,
+    updated_at: row.updated_at,
+  };
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -329,19 +371,10 @@ app.get('/api/spots', async (req, res) => {
   try {
     const lotId = req.query.lot_id || DEFAULT_LOT_ID;
     const [rows] = await pool.query(
-      'SELECT spot_id as id, status, score, out_of_service, updated_at FROM parking_spots WHERE lot_id = ? ORDER BY spot_id',
+      'SELECT spot_id, status, score, out_of_service, reserved_by, reserved_at, updated_at FROM parking_spots WHERE lot_id = ? ORDER BY spot_id',
       [lotId]
     );
-    // out_of_service is an admin override that supersedes the CV-reported status.
-    const spots = rows.map(r => ({
-      id: r.id,
-      status: r.out_of_service ? 'out_of_service' : r.status,
-      raw_status: r.status,
-      out_of_service: !!r.out_of_service,
-      score: r.score,
-      updated_at: r.updated_at,
-    }));
-    res.json({ lot_id: lotId, timestamp: new Date().toISOString(), spots });
+    res.json({ lot_id: lotId, timestamp: new Date().toISOString(), spots: rows.map(toApiSpot) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -362,6 +395,13 @@ app.post('/api/spots/update', async (req, res) => {
            ON DUPLICATE KEY UPDATE status = VALUES(status), score = VALUES(score)`,
           [lot_id, spot.id, spot.status, spot.score || 0]
         );
+        // Car arrived on a reserved spot → reservation fulfilled, clear the hold.
+        if (spot.status === 'occupied') {
+          await conn.query(
+            'UPDATE parking_spots SET reserved_by = NULL, reserved_at = NULL WHERE lot_id = ? AND spot_id = ?',
+            [lot_id, spot.id]
+          );
+        }
       }
       await conn.commit();
     } catch (err) {
@@ -371,20 +411,104 @@ app.post('/api/spots/update', async (req, res) => {
       conn.release();
     }
 
-    // Don't let CV status leak past an admin out-of-service override when broadcasting.
-    let emitted = spots.map(s => ({ id: s.id, status: s.status, score: s.score || 0 }));
+    // Broadcast the effective status (admin OOS + active reservations override CV).
     const ids = spots.map(s => s.id);
+    let emitted = spots.map(s => ({ id: s.id, status: s.status, score: s.score || 0 }));
     if (ids.length) {
-      const [flags] = await pool.query(
-        'SELECT spot_id FROM parking_spots WHERE lot_id = ? AND out_of_service = 1 AND spot_id IN (?)',
+      const [rows] = await pool.query(
+        'SELECT spot_id, status, score, out_of_service, reserved_by, reserved_at FROM parking_spots WHERE lot_id = ? AND spot_id IN (?)',
         [lot_id, ids]
       );
-      const oos = new Set(flags.map(r => r.spot_id));
-      if (oos.size) emitted = emitted.map(s => oos.has(s.id) ? { ...s, status: 'out_of_service' } : s);
+      const byId = new Map(rows.map(r => [r.spot_id, r]));
+      emitted = emitted.map(s => byId.has(s.id) ? { ...s, status: effectiveStatus(byId.get(s.id)) } : s);
     }
 
     io.emit('spots:update', { lot_id, spots: emitted, timestamp: new Date().toISOString() });
     res.json({ ok: true, updated: spots.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Broadcast one spot's effective status to every connected client.
+async function broadcastSpot(lot_id, spot_id) {
+  const [[row]] = await pool.query(
+    'SELECT spot_id, status, score, out_of_service, reserved_by, reserved_at FROM parking_spots WHERE lot_id = ? AND spot_id = ?',
+    [lot_id, spot_id]
+  );
+  if (!row) return;
+  io.emit('spots:update', {
+    lot_id,
+    spots: [{ id: spot_id, status: effectiveStatus(row), score: row.score }],
+    timestamp: new Date().toISOString(),
+  });
+}
+
+// ── Reservations (app holds a spot until the car is detected) ──────────────────
+app.post('/api/spots/reserve', authMiddleware, async (req, res) => {
+  try {
+    const lot_id = req.body.lot_id || DEFAULT_LOT_ID;
+    const spot_id = (req.body.spot_id || '').trim();
+    if (!spot_id) return res.status(400).json({ error: 'spot_id required' });
+
+    const [[row]] = await pool.query('SELECT * FROM parking_spots WHERE lot_id = ? AND spot_id = ?', [lot_id, spot_id]);
+    if (!row) return res.status(404).json({ error: 'Spot not found' });
+    if (row.out_of_service) return res.status(409).json({ error: 'Spot is out of service' });
+    if (row.status === 'occupied') return res.status(409).json({ error: 'Spot is occupied' });
+    const heldByOther = row.reserved_by != null && row.reserved_by !== req.user.id &&
+      row.reserved_at != null && (Date.now() - Number(row.reserved_at) < RESERVATION_TTL_MS);
+    if (heldByOther) return res.status(409).json({ error: 'Spot is already reserved' });
+
+    await pool.query('UPDATE parking_spots SET reserved_by = ?, reserved_at = ? WHERE lot_id = ? AND spot_id = ?',
+      [req.user.id, Date.now(), lot_id, spot_id]);
+    await broadcastSpot(lot_id, spot_id);
+    res.json({ ok: true, spot_id, status: 'reserved' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/spots/release', authMiddleware, async (req, res) => {
+  try {
+    const lot_id = req.body.lot_id || DEFAULT_LOT_ID;
+    const spot_id = (req.body.spot_id || '').trim();
+    if (!spot_id) return res.status(400).json({ error: 'spot_id required' });
+
+    const [[row]] = await pool.query('SELECT reserved_by FROM parking_spots WHERE lot_id = ? AND spot_id = ?', [lot_id, spot_id]);
+    if (!row) return res.status(404).json({ error: 'Spot not found' });
+    if (row.reserved_by != null && row.reserved_by !== req.user.id) {
+      return res.status(403).json({ error: 'Not your reservation' });
+    }
+    await pool.query('UPDATE parking_spots SET reserved_by = NULL, reserved_at = NULL WHERE lot_id = ? AND spot_id = ?', [lot_id, spot_id]);
+    await broadcastSpot(lot_id, spot_id);
+    res.json({ ok: true, spot_id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Public lots list (so the app's lot picker comes from the DB) ────────────────
+app.get('/api/lots', async (req, res) => {
+  try {
+    const [lots] = await pool.query('SELECT lot_id, name, address, total_spots FROM parking_lots ORDER BY name');
+    res.json({ lots });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Issue reports (raised from the app, triaged in the dashboard) ───────────────
+app.post('/api/reports', optionalAuth, async (req, res) => {
+  try {
+    const { lot_id = DEFAULT_LOT_ID, spot_id = '', issue_type, note = '' } = req.body;
+    if (!issue_type) return res.status(400).json({ error: 'issue_type required' });
+    const userId = req.user ? req.user.id : null;
+    const [r] = await pool.query(
+      'INSERT INTO reports (user_id, lot_id, spot_id, issue_type, note) VALUES (?,?,?,?,?)',
+      [userId, lot_id, String(spot_id).slice(0, 20), String(issue_type).slice(0, 40), String(note).slice(0, 500)]
+    );
+    io.emit('report:new', { id: r.insertId, lot_id, spot_id, issue_type, status: 'open', created_at: new Date().toISOString() });
+    res.json({ ok: true, id: r.insertId });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -576,19 +700,17 @@ app.post('/api/admin/spots/status', authMiddleware, requireAdmin, async (req, re
     const { lot_id, spot_id, action } = req.body;
     if (!lot_id || !spot_id || !action) return res.status(400).json({ error: 'lot_id, spot_id and action are required' });
 
-    let sql, params, effective;
+    let sql, params;
+    // Admin overrides also clear any app reservation (a deliberate reset).
     if (action === 'out_of_service') {
-      sql = 'UPDATE parking_spots SET out_of_service = 1 WHERE lot_id = ? AND spot_id = ?';
+      sql = 'UPDATE parking_spots SET out_of_service = 1, reserved_by = NULL, reserved_at = NULL WHERE lot_id = ? AND spot_id = ?';
       params = [lot_id, spot_id];
-      effective = 'out_of_service';
     } else if (action === 'in_service') {
       sql = 'UPDATE parking_spots SET out_of_service = 0 WHERE lot_id = ? AND spot_id = ?';
       params = [lot_id, spot_id];
-      effective = 'free';
     } else if (action === 'free' || action === 'occupied') {
-      sql = 'UPDATE parking_spots SET status = ?, out_of_service = 0 WHERE lot_id = ? AND spot_id = ?';
+      sql = 'UPDATE parking_spots SET status = ?, out_of_service = 0, reserved_by = NULL, reserved_at = NULL WHERE lot_id = ? AND spot_id = ?';
       params = [action, lot_id, spot_id];
-      effective = action;
     } else {
       return res.status(400).json({ error: 'Invalid action' });
     }
@@ -596,14 +718,50 @@ app.post('/api/admin/spots/status', authMiddleware, requireAdmin, async (req, re
     const [r] = await pool.query(sql, params);
     if (!r.affectedRows) return res.status(404).json({ error: 'Spot not found' });
 
-    // For in_service, the effective status reverts to the stored CV status.
-    if (action === 'in_service') {
-      const [[row]] = await pool.query('SELECT status FROM parking_spots WHERE lot_id = ? AND spot_id = ?', [lot_id, spot_id]);
-      effective = row ? row.status : 'free';
-    }
-
-    io.emit('spots:update', { lot_id, spots: [{ id: spot_id, status: effective }], timestamp: new Date().toISOString() });
+    // Emit the true effective status (accounts for any remaining reservation).
+    const [[row]] = await pool.query(
+      'SELECT spot_id, status, score, out_of_service, reserved_by, reserved_at FROM parking_spots WHERE lot_id = ? AND spot_id = ?',
+      [lot_id, spot_id]
+    );
+    const effective = effectiveStatus(row);
+    io.emit('spots:update', { lot_id, spots: [{ id: spot_id, status: effective, score: row.score }], timestamp: new Date().toISOString() });
     res.json({ ok: true, spot_id, status: effective });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Admin: reports triage ───────────────────────────────────────────────────
+app.get('/api/admin/reports', authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const { status } = req.query;
+    const params = [];
+    let where = '';
+    if (status === 'open' || status === 'resolved') { where = 'WHERE r.status = ?'; params.push(status); }
+    const [rows] = await pool.query(
+      `SELECT r.id, r.lot_id, r.spot_id, r.issue_type, r.note, r.status, r.created_at, r.resolved_at,
+              u.name AS user_name, u.email AS user_email
+       FROM reports r LEFT JOIN users u ON u.id = r.user_id
+       ${where} ORDER BY (r.status = 'open') DESC, r.created_at DESC LIMIT 200`,
+      params
+    );
+    const [[{ open }]] = await pool.query("SELECT COUNT(*) AS open FROM reports WHERE status = 'open'");
+    res.json({ reports: rows, open });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/admin/reports/:id', authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (status !== 'open' && status !== 'resolved') return res.status(400).json({ error: 'status must be open or resolved' });
+    const [r] = await pool.query(
+      'UPDATE reports SET status = ?, resolved_at = ? WHERE id = ?',
+      [status, status === 'resolved' ? new Date() : null, req.params.id]
+    );
+    if (!r.affectedRows) return res.status(404).json({ error: 'Report not found' });
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
