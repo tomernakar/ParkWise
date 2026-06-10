@@ -23,6 +23,7 @@ const state = {
   adminSpots: [],         // /api/admin/spots for the managed lot
   manageLotId: null,
   modal: null,            // { type, ... }
+  activity: [],           // recent live spot changes for the Overview feed
 };
 
 let socket = null;
@@ -89,6 +90,12 @@ function enterDemo() {
   state.view = "overview";
   state.lotId = DEFAULT_LOT_ID;
   state.manageLotId = DEFAULT_LOT_ID;
+  // Seed the activity feed so the offline preview looks alive.
+  const t = nowTime();
+  state.activity = [
+    { id: "S9", status: "occupied", time: t }, { id: "S14", status: "free", time: t },
+    { id: "S20", status: "occupied", time: t }, { id: "S13", status: "out_of_service", time: t },
+  ];
   render();
   afterEnterDashboard();
 }
@@ -386,20 +393,32 @@ function connectSocket() {
     socket.on("spots:update", ({ lot_id, spots }) => {
       if (lot_id && lot_id !== state.lotId) return;
       const byId = new Map(state.spots.map((s) => [s.id, s]));
-      const changed = [];
+      const changed = [];   // { id, status } for spots whose effective status changed
       (spots || []).forEach((s) => {
+        // s.status is the effective status broadcast by the server.
+        const applyEffective = (obj) => {
+          if (s.status === "out_of_service") obj.out_of_service = true;
+          else { obj.out_of_service = false; obj.raw_status = s.status; }
+          obj.status = s.status;
+          if (s.score != null) obj.score = s.score;
+        };
         const cur = byId.get(s.id);
         if (cur) {
-          if (cur.status !== s.status) { cur.status = s.status; changed.push(s.id); }
-          cur.score = s.score;
+          if (cur.status !== s.status) { applyEffective(cur); changed.push({ id: s.id, status: s.status }); }
+          else if (s.score != null) cur.score = s.score;
         } else {
-          state.spots.push({ id: s.id, status: s.status, score: s.score });
-          changed.push(s.id);
+          const obj = { id: s.id }; applyEffective(obj);
+          state.spots.push(obj);
+          changed.push({ id: s.id, status: s.status });
         }
       });
       if (!changed.length) return;
+      // Record for the live activity feed (newest first).
+      const t = nowTime();
+      changed.forEach((c) => state.activity.unshift({ id: c.id, status: c.status, time: t }));
+      state.activity = state.activity.slice(0, 30);
       state.spots.sort(spotSort);
-      if (state.view === "overview") { renderLotMap(); recomputeOccupancy(); }
+      if (state.view === "overview") { renderLotMap(); recomputeOccupancy(); renderActivity(); }
       // Keep the management map honest if it's open for this lot.
       if (state.view === "spots" && lot_id === state.manageLotId) loadAdminSpots(state.manageLotId).then(render);
     });
@@ -622,11 +641,25 @@ function managedSpotsHTML() {
   const useMap = lotUsesMap(state.manageLotId, state.adminSpots);
   if (useMap) {
     const extra = state.adminSpots.filter((s) => !LAYOUT_IDS.has(s.id));
+    const free = state.adminSpots.filter((s) => !s.out_of_service && s.status === "free").length;
+    const occ = state.adminSpots.filter((s) => !s.out_of_service && s.status === "occupied").length;
+    const oos = state.adminSpots.filter((s) => s.out_of_service).length;
     return `
-      <div class="lotmap-wrap">${lotMapSvg(state.adminSpots, { clickable: true })}</div>
-      <div class="lotmap" style="margin-top:16px">
-        ${extra.map(adminSpotTileHTML).join("")}
-        <div class="spot add" onclick="addSpotPrompt()" title="Add spot">＋</div>
+      <div class="spots-main">
+        <div class="lotmap-wrap">${lotMapSvg(state.adminSpots, { clickable: true })}</div>
+        <div class="spots-side">
+          <div class="stat-grid">
+            <div class="ministat free"><div class="n">${free}</div><div class="l">Free</div></div>
+            <div class="ministat occ"><div class="n">${occ}</div><div class="l">Occupied</div></div>
+            <div class="ministat oos"><div class="n">${oos}</div><div class="l">Out of service</div></div>
+          </div>
+          <p class="side-hint">Click any spot on the map to set it free or occupied, mark it out of service, or remove it. Out-of-service overrides stay sticky even when the camera reports a change.</p>
+          <div class="side-sub">${extra.length ? "Extra spots (off-layout)" : "Add a spot"}</div>
+          <div class="lotmap">
+            ${extra.map(adminSpotTileHTML).join("")}
+            <div class="spot add" onclick="addSpotPrompt()" title="Add spot">＋</div>
+          </div>
+        </div>
       </div>`;
   }
   return `
@@ -809,19 +842,72 @@ async function deleteLot(lotId) {
 function overviewHTML() {
   return `
     <section class="kpi-grid" id="kpiGrid">${kpiCardsHTML()}</section>
-    <section class="two-col">
+    <section class="ov-main">
       <div class="card panel">
         <div class="panel-head">
           <h3>Live lot map · <span class="mono" style="color:var(--muted)">${escapeHtml(state.lotId)}</span></h3>
-          ${mapLegendHTML()}
         </div>
         <div id="lotmap">${overviewMapHTML()}</div>
+        <div style="margin-top:16px">${mapLegendHTML()}</div>
       </div>
-      <div class="card panel">
-        <div class="panel-head"><h3>Lot summary</h3></div>
-        <div id="lotSummary">${lotSummaryHTML()}</div>
+      <div class="rail">
+        <div class="rail-2">
+          <div class="card panel">
+            <div class="panel-head"><h3>Lot summary</h3></div>
+            <div id="lotSummary">${lotSummaryHTML()}</div>
+          </div>
+          <div class="card panel">
+            <div class="panel-head"><h3>Occupancy by type</h3></div>
+            <div id="occByType">${occByTypeHTML()}</div>
+          </div>
+        </div>
+        <div class="card panel">
+          <div class="panel-head">
+            <h3>Live activity</h3>
+            <span style="font-size:11px;color:var(--faint)">recent spot changes</span>
+          </div>
+          <div id="activityFeed">${activityFeedHTML()}</div>
+        </div>
       </div>
     </section>`;
+}
+
+// Occupancy split by spot type (regular / EV / accessible), from the lot layout.
+function occByTypeHTML() {
+  const colors = { regular: "var(--success)", ev: "var(--warn)", accessible: "var(--info)" };
+  const labels = { regular: "Regular", ev: "Electric", accessible: "Accessible" };
+  const buckets = { regular: { total: 0, free: 0 }, ev: { total: 0, free: 0 }, accessible: { total: 0, free: 0 } };
+  state.spots.forEach((s) => {
+    const t = LAYOUT[s.id]?.type;
+    if (!t || !buckets[t]) return;
+    buckets[t].total++;
+    if (!s.out_of_service && (s.raw_status ?? s.status) === "free") buckets[t].free++;
+  });
+  const rows = Object.keys(buckets).map((t) => {
+    const b = buckets[t];
+    const pct = b.total ? Math.round((b.free / b.total) * 100) : 0;
+    return `<div class="typerow">
+      <span class="swatch" style="background:${colors[t]}"></span>
+      <span class="tname">${labels[t]}</span>
+      <span class="tbar"><i style="width:${pct}%;background:${colors[t]}"></i></span>
+      <span class="tnum">${b.free}/${b.total} free</span>
+    </div>`;
+  }).join("");
+  return rows || `<div class="empty">No spot data.</div>`;
+}
+
+function activityFeedHTML() {
+  if (!state.activity.length) {
+    return `<div class="empty">${state.socketConnected ? "Watching for spot changes…" : "No recent activity."}</div>`;
+  }
+  const color = (st) => st === "occupied" ? "var(--danger)" : st === "out_of_service" ? "var(--faint)" : "var(--success)";
+  const verb = (st) => st === "occupied" ? "was taken" : st === "out_of_service" ? "went out of service" : "opened up";
+  return `<div class="feed">${state.activity.slice(0, 8).map((a) => `
+    <div class="feed-row">
+      <span class="feed-dot" style="background:${color(a.status)}"></span>
+      <span class="ftxt"><b>${escapeHtml(a.id)}</b> ${verb(a.status)}</span>
+      <span class="ftime">${a.time}</span>
+    </div>`).join("")}</div>`;
 }
 
 function kpiCardsHTML() {
@@ -884,13 +970,23 @@ function renderLotMap() {
   const el = document.getElementById("lotmap");
   if (el) el.innerHTML = overviewMapHTML();
 }
+function renderActivity() {
+  const el = document.getElementById("activityFeed");
+  if (el) el.innerHTML = activityFeedHTML();
+}
+// Local occupancy recompute between server refreshes — mirrors the server's
+// "percent of serviceable spaces" math so out-of-service spots don't count.
 function recomputeOccupancy() {
   if (!state.overview) return;
-  const total = state.spots.length;
-  const occupied = occupiedCount();
-  const free = total - occupied;
-  const percent = total ? Math.round((occupied / total) * 100) : 0;
-  state.overview.occupancy = { ...state.overview.occupancy, total, occupied, free, percent };
+  let total = state.spots.length, occupied = 0, oos = 0;
+  state.spots.forEach((s) => {
+    if (s.out_of_service || s.status === "out_of_service") { oos++; return; }
+    if ((s.raw_status ?? s.status) === "occupied") occupied++;
+  });
+  const serviceable = total - oos;
+  const free = serviceable - occupied;
+  const percent = serviceable ? Math.round((occupied / serviceable) * 100) : 0;
+  state.overview.occupancy = { ...state.overview.occupancy, total, occupied, free, out_of_service: oos, serviceable, percent };
   updateKpis();
 }
 function updateKpis() {
@@ -907,6 +1003,8 @@ function updateKpis() {
   setText("reportsVal", o.reports?.open ?? 0);
   const sum = document.getElementById("lotSummary");
   if (sum) sum.innerHTML = lotSummaryHTML();
+  const byType = document.getElementById("occByType");
+  if (byType) byType.innerHTML = occByTypeHTML();
 }
 function liveDotState() {
   if (state.demo) return { cls: "live-dot demo", txt: "Demo" };
