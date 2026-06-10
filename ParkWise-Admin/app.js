@@ -24,6 +24,8 @@ const state = {
   manageLotId: null,
   modal: null,            // { type, ... }
   activity: [],           // recent live spot changes for the Overview feed
+  reports: [],            // /api/admin/reports
+  reportFilter: "open",   // open | resolved | all
 };
 
 let socket = null;
@@ -61,11 +63,18 @@ const DEMO = {
   user: { id: 0, name: "Demo Admin", email: "admin@parkwise.app", role: "admin" },
   lots: [],
   spots: {},   // lot_id -> [ { id, status, out_of_service, score } ]
+  reports: [],
 };
 
 function demoInit() {
   DEMO.lots = [
     { lot_id: "demo_lot_1", name: "Exelerator Demo Lot", address: "Exelerator Campus, Level 1", total_spots: 27 },
+  ];
+  const now = Date.now();
+  DEMO.reports = [
+    { id: 3, lot_id: "demo_lot_1", spot_id: "S5", issue_type: "occupied", note: "Car already parked here", status: "open", created_at: new Date(now - 6 * 60000).toISOString(), resolved_at: null, user_name: "Dana L.", user_email: "dana@example.com" },
+    { id: 2, lot_id: "demo_lot_1", spot_id: "S13", issue_type: "blocked", note: "Cones blocking the bay", status: "open", created_at: new Date(now - 42 * 60000).toISOString(), resolved_at: null, user_name: null, user_email: null },
+    { id: 1, lot_id: "demo_lot_1", spot_id: "S20", issue_type: "spill", note: "Oil spill near the wall", status: "resolved", created_at: new Date(now - 26 * 3600000).toISOString(), resolved_at: new Date(now - 25 * 3600000).toISOString(), user_name: "Omer K.", user_email: "omer@example.com" },
   ];
   const occupied = new Set(["S2", "S3", "S5", "S7", "S9", "S11", "S15", "S20", "S24"]);
   const oos = new Set(["S13"]);
@@ -188,6 +197,17 @@ async function demoApi(path, opts = {}) {
     if (body.action === "out_of_service") s.out_of_service = true;
     else if (body.action === "in_service") s.out_of_service = false;
     else if (body.action === "free" || body.action === "occupied") { s.status = body.action; s.out_of_service = false; }
+    return { ok: true };
+  }
+  if (p === "/api/admin/reports" && method === "GET") {
+    const f = u.searchParams.get("status");
+    const list = f ? DEMO.reports.filter((r) => r.status === f) : DEMO.reports;
+    return { reports: list, open: DEMO.reports.filter((r) => r.status === "open").length };
+  }
+  if (p.startsWith("/api/admin/reports/") && method === "PATCH") {
+    const id = Number(p.split("/").pop());
+    const r = DEMO.reports.find((x) => x.id === id);
+    if (r) { r.status = body.status; r.resolved_at = body.status === "resolved" ? new Date().toISOString() : null; }
     return { ok: true };
   }
   throw new Error(`Demo: unhandled ${method} ${p}`);
@@ -357,10 +377,12 @@ function lotMapSvg(spots, opts = {}) {
     const s = byId.get(id);
     const present = !!s;
     const oos = !!(s && s.out_of_service);
+    const reserved = !!(s && (s.reserved || s.status === "reserved"));
     const raw = s ? (s.raw_status != null ? s.raw_status : s.status) : "free";
     let fill = "rgba(52,211,153,.20)", stroke = "rgba(52,211,153,.80)";
     if (!present) { fill = "rgba(255,255,255,.02)"; stroke = "rgba(255,255,255,.10)"; }
     else if (oos) { fill = "rgba(255,255,255,.06)"; stroke = "rgba(255,255,255,.32)"; }
+    else if (reserved) { fill = "rgba(86,224,201,.20)"; stroke = "rgba(86,224,201,.75)"; }
     else if (raw === "occupied") { fill = "rgba(248,113,133,.22)"; stroke = "rgba(248,113,133,.85)"; }
     else if (g.type === "ev") { fill = "rgba(245,176,71,.26)"; stroke = "rgba(245,176,71,.95)"; }
     else if (g.type === "accessible") { fill = "rgba(96,165,250,.24)"; stroke = "rgba(96,165,250,.92)"; }
@@ -392,6 +414,7 @@ function mapLegendHTML() {
   return `<div class="legend">
     <span><i style="background:rgba(52,211,153,.85)"></i>Free</span>
     <span><i style="background:rgba(248,113,133,.85)"></i>Occupied</span>
+    <span><i style="background:rgba(86,224,201,.85)"></i>Reserved</span>
     <span><i style="background:rgba(96,165,250,.9)"></i>Accessible</span>
     <span><i style="background:rgba(245,176,71,.95)"></i>EV</span>
     <span><i style="background:rgba(255,255,255,.4)"></i>Out of service</span>
@@ -408,6 +431,11 @@ function connectSocket() {
     socket = io();
     socket.on("connect", () => { state.socketConnected = true; updateLiveDot(); });
     socket.on("disconnect", () => { state.socketConnected = false; updateLiveDot(); });
+    socket.on("report:new", () => {
+      // Bump the Overview open-reports KPI and refresh the Reports view if open.
+      if (state.overview?.reports) { state.overview.reports.open = (state.overview.reports.open || 0) + 1; if (state.view === "overview") updateKpis(); }
+      if (state.view === "reports") loadReports();
+    });
     socket.on("spots:update", ({ lot_id, spots }) => {
       if (lot_id && lot_id !== state.lotId) return;
       const byId = new Map(state.spots.map((s) => [s.id, s]));
@@ -465,7 +493,7 @@ const NAV = [
   { id: "overview",  label: "Overview",      icon: I.grid,  ready: true },
   { id: "spots",     label: "Spots & Lots",  icon: I.spot,  ready: true },
   { id: "users",     label: "Users",         icon: I.users, ready: false },
-  { id: "reports",   label: "Reports",       icon: I.flag,  ready: false },
+  { id: "reports",   label: "Reports",       icon: I.flag,  ready: true },
   { id: "analytics", label: "Analytics",     icon: I.chart, ready: false },
 ];
 const VIEW_TITLES = {
@@ -479,6 +507,24 @@ function navigate(view) {
   render();
   if (view === "overview") { renderLotMap(); updateKpis(); }
   if (view === "spots") loadSpotsView();
+  if (view === "reports") loadReports();
+}
+
+// ---------- Reports data ----------
+async function loadReports() {
+  try {
+    const q = state.reportFilter === "all" ? "" : `?status=${state.reportFilter}`;
+    const data = await api(`/api/admin/reports${q}`);
+    state.reports = data.reports || [];
+    if (state.view === "reports") render();
+  } catch (e) { console.warn(e.message); }
+}
+function setReportFilter(f) { state.reportFilter = f; loadReports(); }
+async function resolveReport(id, status) {
+  try {
+    await api(`/api/admin/reports/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
+    await loadReports();
+  } catch (e) { alert(e.message); }
 }
 
 // ---------- Spots & Lots data ----------
@@ -518,8 +564,8 @@ function loginHTML() {
     <div class="login-wrap">
       <form class="login-card" id="loginForm">
         <div class="login-logo">
-          <span class="mark">${I.pin}</span>
-          <h1>ParkWise <span>Admin</span></h1>
+          <img src="logo.png" alt="ParkWise" class="brand-img">
+          <span class="admin-tag">Admin Console</span>
         </div>
         <p class="login-sub">Sign in with an administrator account</p>
         <div class="field">
@@ -551,8 +597,8 @@ function shellHTML() {
     <div class="shell">
       <aside class="sidebar">
         <div class="sb-logo">
-          <span class="mark">${I.pin}</span>
-          <h2>ParkWise <span>Admin</span></h2>
+          <img src="logo.png" alt="ParkWise" class="brand-img-sm">
+          <span class="admin-tag">Admin</span>
         </div>
         <nav class="nav">
           ${NAV.map(navItemHTML).join("")}
@@ -594,7 +640,50 @@ function navItemHTML(n) {
 function viewHTML() {
   if (state.view === "overview") return overviewHTML();
   if (state.view === "spots") return spotsHTML();
+  if (state.view === "reports") return reportsHTML();
   return placeholderHTML(state.view);
+}
+
+// ---------- Reports view ----------
+const ISSUE_LABELS = {
+  occupied: "Spot already occupied", blocked: "Access blocked",
+  damaged: "Damaged surface", spill: "Water / spill hazard",
+};
+function reportsHTML() {
+  const filters = [["open", "Open"], ["resolved", "Resolved"], ["all", "All"]];
+  const rows = state.reports.map(reportRowHTML).join("");
+  return `
+    <section class="card panel">
+      <div class="panel-head">
+        <h3>Issue reports</h3>
+        <div class="seg">
+          ${filters.map(([v, l]) => `<button class="seg-btn ${state.reportFilter === v ? "active" : ""}" onclick="setReportFilter('${v}')">${l}</button>`).join("")}
+        </div>
+      </div>
+      ${state.reports.length ? `<div class="rep-list">${rows}</div>`
+        : `<div class="empty">No ${state.reportFilter === "all" ? "" : state.reportFilter + " "}reports.</div>`}
+    </section>`;
+}
+function reportRowHTML(r) {
+  const open = r.status === "open";
+  const who = r.user_name ? `${escapeHtml(r.user_name)}` : "Guest";
+  return `
+    <div class="rep-row">
+      <span class="rep-badge ${open ? "open" : "done"}">${open ? "Open" : "Resolved"}</span>
+      <div class="rep-main">
+        <div class="rep-title">${escapeHtml(ISSUE_LABELS[r.issue_type] || r.issue_type)}
+          ${r.spot_id ? `· <span class="mono" style="color:var(--muted)">${escapeHtml(r.spot_id)}</span>` : ""}</div>
+        ${r.note ? `<div class="rep-note">"${escapeHtml(r.note)}"</div>` : ""}
+        <div class="rep-meta">${who} · ${escapeHtml(r.lot_id)} · ${fmtDate(r.created_at)}</div>
+      </div>
+      ${open
+        ? `<button class="btn-sm primary" onclick="resolveReport(${r.id},'resolved')">Resolve</button>`
+        : `<button class="btn-sm" onclick="resolveReport(${r.id},'open')">Reopen</button>`}
+    </div>`;
+}
+function fmtDate(s) {
+  const d = new Date(s);
+  return isNaN(d) ? "" : d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function placeholderHTML(view) {
@@ -1067,6 +1156,8 @@ window.addSpotPrompt = addSpotPrompt;
 window.submitLot = submitLot;
 window.confirmDeleteLot = confirmDeleteLot;
 window.deleteLot = deleteLot;
+window.setReportFilter = setReportFilter;
+window.resolveReport = resolveReport;
 
 // Periodic overview refresh (sessions/users/reports don't arrive over the socket).
 setInterval(() => { if (state.view !== "login") loadOverview(); }, 30000);

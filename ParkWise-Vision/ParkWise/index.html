@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 /* ============================================================
@@ -1228,6 +1228,14 @@ function mapSvg(activeSpotId, includeRoute, animateRoute) {
       fill = "rgba(96,165,250,.24)";
       stroke = "rgba(96,165,250,.92)";
     }
+    if (spot.status === "out_of_service") {
+      fill = "rgba(255,255,255,.06)";
+      stroke = "rgba(255,255,255,.30)";
+    }
+    if (spot.status === "reserved") {
+      fill = "rgba(86,224,201,.20)";
+      stroke = "rgba(86,224,201,.70)";
+    }
     if (active) {
       fill = "rgba(45,212,191,.50)";
       stroke = "#5eead4";
@@ -2083,7 +2091,14 @@ function findSpot() {
 function reassignSpot() {
   if (!state.issueId) return;
   const currentSpot = getAssignedSpot();
-  if (currentSpot) markTaken(currentSpot.id);
+  if (currentSpot) {
+    // Send the issue to the server so admins can triage it in the dashboard.
+    apiCall("/api/reports", {
+      method: "POST",
+      body: JSON.stringify({ lot_id: CV_LOT_ID, spot_id: currentSpot.id, issue_type: state.issueId }),
+    }).catch(() => {});
+    markTaken(currentSpot.id);
+  }
   const nextSpot = assignSpot(currentSpot ? currentSpot.type : state.vehicleType);
   if (!nextSpot) {
     showToast("No matching replacement spot is available.");
@@ -2103,8 +2118,10 @@ function patchSpotColors() {
     if (!rect) return;
     let fill = "rgba(52,211,153,.20)", stroke = "rgba(52,211,153,.80)";
     if (spot.status === "occupied") { fill = "rgba(248,113,133,.22)"; stroke = "rgba(248,113,133,.85)"; }
-    if (spot.type === "ev" && spot.status !== "occupied") { fill = "rgba(245,176,71,.26)"; stroke = "rgba(245,176,71,.95)"; }
-    if (spot.type === "accessible" && spot.status !== "occupied") { fill = "rgba(96,165,250,.24)"; stroke = "rgba(96,165,250,.92)"; }
+    else if (spot.status === "out_of_service") { fill = "rgba(255,255,255,.06)"; stroke = "rgba(255,255,255,.30)"; }
+    else if (spot.status === "reserved") { fill = "rgba(86,224,201,.20)"; stroke = "rgba(86,224,201,.70)"; }
+    else if (spot.type === "ev") { fill = "rgba(245,176,71,.26)"; stroke = "rgba(245,176,71,.95)"; }
+    else if (spot.type === "accessible") { fill = "rgba(96,165,250,.24)"; stroke = "rgba(96,165,250,.92)"; }
     if (spot.id === state.assignedSpotId) { fill = "rgba(45,212,191,.50)"; stroke = "#5eead4"; }
     rect.setAttribute("fill", fill);
     rect.setAttribute("stroke", stroke);
